@@ -14,7 +14,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, ease: "easeOut" }}
       >
-        <div className="max-w-[80%] px-4 py-2.5 rounded-2xl bg-white text-black text-[15px] leading-relaxed whitespace-pre-wrap">
+        <div className="max-w-[80%] px-5 py-3 rounded-3xl bg-white text-black text-[16px] leading-relaxed whitespace-pre-wrap">
           {message.content}
         </div>
       </motion.div>
@@ -24,20 +24,21 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
   // Alto message — avatar + name + content, no bubble.
   return (
     <motion.div
-      className="flex gap-3"
+      className="flex gap-3.5"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
     >
-      <AltoAvatar />
-      <div className="flex-1 min-w-0 pt-0.5">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-[13px] font-medium text-white">Alto</span>
-          <span className="text-[11px] text-white/30">AI</span>
+      <AltoAvatar size={32} />
+      <div className="flex-1 min-w-0 pt-1">
+        <div className="text-[13px] font-semibold text-white mb-2 tracking-tight">
+          Alto
         </div>
-        <div className="text-[15px] leading-relaxed text-white/90 whitespace-pre-wrap">
+        <div className="text-[16px] leading-[1.65] text-white/90 whitespace-pre-wrap">
           {message.content || (
-            <span className="text-white/30">…</span>
+            <span className="inline-flex items-center gap-1 text-white/40">
+              <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-pulse" />
+            </span>
           )}
         </div>
       </div>

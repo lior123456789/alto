@@ -205,36 +205,33 @@ export function ChatInterface() {
   const showQuickReplies = messages.length === 1 && !isLoading;
 
   return (
-    <div className="flex flex-col h-screen w-full bg-[#050507] text-white relative overflow-hidden">
-      {/* Subtle ambient glow */}
-      <div className="pointer-events-none absolute inset-0 opacity-50">
-        <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-sky-500/10 blur-[120px] rounded-full" />
-      </div>
-
+    <div className="flex flex-col h-screen w-full bg-black text-white relative overflow-hidden">
       {/* Header */}
-      <header className="relative z-10 px-5 py-4 border-b border-white/[0.05] flex items-center justify-between backdrop-blur-md bg-black/30">
+      <header className="relative z-10 px-6 py-4 flex items-center justify-between border-b border-white/[0.04]">
         <Link
           href="/"
-          className="flex items-center gap-2 text-sm text-white/50 hover:text-white transition-colors"
+          className="flex items-center gap-1.5 text-sm text-white/50 hover:text-white transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back
+          <span className="hidden sm:inline">Back</span>
         </Link>
         <div className="flex items-center gap-2.5">
-          <AltoAvatar size={26} />
-          <div className="text-left">
-            <div className="text-sm font-semibold leading-none">Alto</div>
-            <div className="text-[11px] text-white/40 mt-0.5">
-              {isLoading ? statusLabel : "Online · No broker, no commission"}
-            </div>
-          </div>
+          <AltoAvatar size={28} />
+          <span className="text-[15px] font-semibold tracking-tight">Alto</span>
         </div>
-        <div className="w-12" />
+        <div className="flex items-center gap-5">
+          <Link
+            href="/billing"
+            className="text-sm font-medium text-white/60 hover:text-white"
+          >
+            Pricing
+          </Link>
+        </div>
       </header>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto relative z-10">
-        <div className="max-w-2xl mx-auto px-5 py-8 space-y-7">
+        <div className="max-w-2xl mx-auto px-6 py-10 space-y-8">
           {messages.map((message, i) => (
             <div key={i} className="space-y-4">
               <MessageBubble message={message} />
@@ -279,11 +276,11 @@ export function ChatInterface() {
       </div>
 
       {/* Composer */}
-      <div className="relative z-10 px-5 pb-6 pt-3 bg-gradient-to-t from-[#050507] via-[#050507] to-transparent">
+      <div className="relative z-10 px-6 pb-8 pt-4 bg-gradient-to-t from-black via-black to-transparent">
         <div className="max-w-2xl mx-auto">
           {showQuickReplies && (
             <motion.div
-              className="mb-3 flex flex-wrap gap-2 justify-center"
+              className="mb-4 flex flex-wrap gap-2 justify-center"
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
@@ -295,7 +292,7 @@ export function ChatInterface() {
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.25 + i * 0.05 }}
-                  className="text-sm px-4 py-2 rounded-full border border-white/10 text-white/70 hover:bg-white/5 hover:text-white hover:border-white/20 transition-all"
+                  className="text-[13px] px-3.5 py-1.5 rounded-full border border-white/10 text-white/70 hover:bg-white/[0.04] hover:text-white hover:border-white/20 transition-all"
                 >
                   {opt}
                 </motion.button>
@@ -303,7 +300,7 @@ export function ChatInterface() {
             </motion.div>
           )}
 
-          <div className="bg-white/[0.04] border border-white/10 rounded-2xl backdrop-blur-md focus-within:border-sky-400/40 focus-within:bg-white/[0.06] transition-all">
+          <div className="relative bg-[#0d0d10] border border-white/[0.08] rounded-3xl shadow-[0_8px_40px_-12px_rgba(0,0,0,0.8)] focus-within:border-white/20 focus-within:shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_8px_40px_-12px_rgba(56,189,248,0.25)] transition-all">
             <textarea
               ref={textareaRef}
               value={input}
@@ -314,9 +311,9 @@ export function ChatInterface() {
                   sendMessage();
                 }
               }}
-              placeholder="Tell Alto what you need…"
+              placeholder="Message Alto…"
               rows={1}
-              className="w-full bg-transparent border-none px-4 pt-4 pb-2 text-[15px] text-white placeholder:text-white/30 focus:outline-none resize-none"
+              className="w-full bg-transparent border-none px-5 pt-4 pb-2 text-[16px] leading-relaxed text-white placeholder:text-white/35 focus:outline-none resize-none"
               style={{ maxHeight: 200 }}
               onInput={(e) => {
                 const t = e.currentTarget;
@@ -324,22 +321,19 @@ export function ChatInterface() {
                 t.style.height = `${Math.min(t.scrollHeight, 200)}px`;
               }}
             />
-            <div className="flex items-center justify-between px-3 pb-3">
-              <div className="text-[11px] text-white/30">
-                ⏎ to send · ⇧⏎ for new line
-              </div>
+            <div className="flex items-center justify-end px-3 pb-3">
               <motion.button
                 onClick={() => sendMessage()}
                 disabled={submitDisabled}
                 whileTap={{ scale: 0.94 }}
-                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${
                   submitDisabled
                     ? "bg-white/[0.05] text-white/30"
-                    : "bg-white text-black hover:bg-white/90 shadow-[0_0_20px_-4px_rgba(255,255,255,0.4)]"
+                    : "bg-white text-black hover:bg-white/95 shadow-[0_0_24px_-6px_rgba(255,255,255,0.5)]"
                 }`}
                 aria-label="Send"
               >
-                <ArrowUp className="w-4 h-4" />
+                <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
               </motion.button>
             </div>
           </div>
