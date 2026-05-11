@@ -42,11 +42,16 @@ export async function POST(req: NextRequest) {
               /<submit_lead>([\s\S]*?)<\/submit_lead>/,
             );
             let everquoteFailed = false;
+            let submittedProfile: Record<string, unknown> | null = null;
             if (submitMatch) {
               try {
                 const profileBody = JSON.parse(submitMatch[1]) as Omit<
                   AltoUserProfile,
                   "session_id"
+                >;
+                submittedProfile = profileBody as unknown as Record<
+                  string,
+                  unknown
                 >;
                 const profile: AltoUserProfile = {
                   ...profileBody,
@@ -122,14 +127,24 @@ export async function POST(req: NextRequest) {
             );
             if (fetchMatch || everquoteFailed) {
               try {
-                const params = fetchMatch
-                  ? (JSON.parse(fetchMatch[1]) as FetchQuotesParams)
-                  : ({
-                      vertical: "insurance",
-                      type: "home",
-                      zip_code: "00000",
-                      profile: {},
-                    } as FetchQuotesParams);
+                let params: FetchQuotesParams;
+                if (fetchMatch) {
+                  params = JSON.parse(fetchMatch[1]) as FetchQuotesParams;
+                } else {
+                  // EverQuote-rejected fallback — reuse the profile we
+                  // already collected during the submit_lead flow so the
+                  // mock quotes still get real prices/coverage/state.
+                  const sp = (submittedProfile ?? {}) as Record<
+                    string,
+                    unknown
+                  >;
+                  params = {
+                    vertical: "insurance",
+                    type: (sp.insurance_type as FetchQuotesParams["type"]) ?? "home",
+                    zip_code: (sp.zip_code as string) ?? "00000",
+                    profile: sp,
+                  };
+                }
                 const quotes = await fetchInsuranceQuotes(params);
                 send({ type: "quotes", quotes });
               } catch (e) {

@@ -74,9 +74,27 @@ If EverQuote rejects the lead, fall back to mock quotes by including:
   "vertical": "insurance",
   "type": "home|renters|auto|life",
   "zip_code": "...",
-  "profile": { ...collected user data }
+  "profile": {
+    "state": "FL",
+    "city": "Miami",
+    "zip_code": "33101",
+    "first_name": "...",
+    "last_name": "...",
+    "email": "...",
+    "age": 32,
+    "home_value": 425000,
+    "coverage_amount": 425000,
+    "currently_insured": true,
+    "current_insurer": "...",
+    "single_family": true,
+    "months_insured": 24,
+    "military_service": false,
+    "vehicle_count": 2
+  }
 }
 </fetch_quotes>
+
+CRITICAL: include EVERY field you have in the profile object. The pricing engine uses home_value, age, state, currently_insured, military_service, and single_family to compute realistic monthly premiums. An empty profile produces flat baseline prices. The provider list also varies by state (FL gets Citizens/Progressive/State Farm, CA gets Lemonade/Farmers/Mercury, TX gets State Farm/Allstate/Progressive, NY gets Lemonade/State Farm/Travelers).
 
 You can also use <fetch_quotes> for life insurance (not yet wired to EverQuote).
 
