@@ -1,9 +1,10 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "framer-motion";
 import type { ChatMessage } from "@/types";
 
-export function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubbleInner({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
 
   if (isUser) {
@@ -62,6 +63,18 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
     </motion.div>
   );
 }
+
+export const MessageBubble = memo(MessageBubbleInner, (prev, next) => {
+  // Re-render only when the visible content changes for this specific
+  // message (typewriter advances or final content arrives).
+  const p = prev.message;
+  const n = next.message;
+  return (
+    p.role === n.role &&
+    p.content === n.content &&
+    p.revealedContent === n.revealedContent
+  );
+});
 
 export function AltoAvatar({ size = 28 }: { size?: number }) {
   return (

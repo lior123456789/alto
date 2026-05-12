@@ -41,8 +41,12 @@ export interface MortgageOfferLite {
   estimatedRate: number;
   estimatedMonthly: number;
   applyUrl: string;
-  prefillSupported: boolean;
   note: string | null;
+}
+
+export interface MortgageRateMeta {
+  baseRate: number;
+  baseRateSource: "fred" | "fallback";
 }
 
 export interface MortgageProfileLite {
@@ -72,6 +76,12 @@ export interface ChatMessage {
   plaidSummary?: PlaidSummary;
   mortgageOffers?: MortgageOfferLite[];
   mortgageProfile?: MortgageProfileLite;
+  mortgageRateMeta?: MortgageRateMeta;
+  listings?: {
+    listings: import("@/lib/realestate").ListingResult[];
+    source: "rentcast" | "fallback";
+    fallbackUrls?: { name: string; url: string }[];
+  };
 }
 
 export interface FetchQuotesParams {

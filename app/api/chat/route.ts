@@ -11,6 +11,7 @@ import {
   buildMortgageOffers,
   type MortgageProfile,
 } from "@/lib/mortgage";
+import { searchListings, type ListingSearchParams } from "@/lib/realestate";
 import type { ChatMessage, FetchQuotesParams } from "@/types";
 
 export const runtime = "nodejs";
@@ -134,17 +135,45 @@ export async function POST(req: NextRequest) {
                 const profile = JSON.parse(
                   mortgageMatch[1],
                 ) as MortgageProfile;
-                const offers = buildMortgageOffers(profile);
+                const { offers, baseRate, baseRateSource } =
+                  await buildMortgageOffers(profile);
                 send({
                   type: "mortgage_offers",
                   profile,
                   offers,
+                  baseRate,
+                  baseRateSource,
                 });
               } catch (e) {
                 console.error("[chat] mortgage parse failed:", e);
                 send({
                   type: "error",
                   error: "Couldn't generate mortgage offers.",
+                });
+              }
+            }
+
+            // 1.9 Real estate listings — Rentcast + fallback
+            const listingsMatch = complete.match(
+              /<fetch_listings>([\s\S]*?)<\/fetch_listings>/,
+            );
+            if (listingsMatch) {
+              try {
+                const params = JSON.parse(
+                  listingsMatch[1],
+                ) as ListingSearchParams;
+                const result = await searchListings(params);
+                send({
+                  type: "listings",
+                  listings: result.listings,
+                  source: result.source,
+                  fallbackUrls: result.fallbackUrls,
+                });
+              } catch (e) {
+                console.error("[chat] listing fetch failed:", e);
+                send({
+                  type: "error",
+                  error: "Listing search failed.",
                 });
               }
             }

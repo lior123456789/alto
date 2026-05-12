@@ -43,3 +43,7 @@ services:
         sync: false
       - key: PLAID_ENV
         value: sandbox
+      - key: FRED_API_KEY
+        sync: false
+      - key: RENTCAST_API_KEY
+        sync: false

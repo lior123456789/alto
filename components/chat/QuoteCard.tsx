@@ -92,8 +92,15 @@ export function QuoteCard({
             : "bg-white text-black hover:bg-white/90"
         }`}
       >
-        Continue — quote is pre-filled →
+        Continue at {quote.provider} →
       </button>
+
+      <p className="text-[10px] text-white/30 text-center mt-3 leading-relaxed">
+        Rates and coverage estimates are based on the information you
+        provided and current market data. Final rates are determined by
+        each provider upon full application review. Alto is not a
+        licensed insurance agent or mortgage broker.
+      </p>
     </div>
   );
 }

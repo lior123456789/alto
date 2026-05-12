@@ -19,6 +19,8 @@ import type {
   MortgageProfileLite,
 } from "@/types";
 import { MortgageOffersCard } from "./MortgageOffersCard";
+import { ListingsCard } from "./ListingsCard";
+import type { ListingResult } from "@/lib/realestate";
 
 const INITIAL: ChatMessage = {
   role: "assistant",
@@ -36,6 +38,7 @@ function stripDisplay(raw: string): string {
     .replace(/<submit_lead>[\s\S]*?<\/submit_lead>/g, "")
     .replace(/<plaid_connect\s*\/?>/gi, "")
     .replace(/<recommend_mortgage>[\s\S]*?<\/recommend_mortgage>/g, "")
+    .replace(/<fetch_listings>[\s\S]*?<\/fetch_listings>/g, "")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "$1")
     .replace(/__([^_]+)__/g, "$1")
@@ -67,10 +70,31 @@ export function ChatInterface() {
   const searchParams = useSearchParams();
   const initialQuery = searchParams?.get("q") ?? null;
   const autoSentRef = useRef(false);
+  const prevMessageCountRef = useRef(messages.length);
 
+  // Scroll to bottom only when a NEW message arrives — not on every
+  // typewriter tick, which previously caused scroll lag on long
+  // conversations.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
+    if (messages.length > prevMessageCountRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      prevMessageCountRef.current = messages.length;
+    }
+  }, [messages.length]);
+
+  // Separate, lighter effect to nudge during the typing of the FIRST
+  // assistant chunk (so the screen doesn't sit looking still). Throttled
+  // to once per second.
+  const lastNudgeRef = useRef(0);
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant") return;
+    const now = Date.now();
+    if (now - lastNudgeRef.current > 1000) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      lastNudgeRef.current = now;
+    }
+  }, [messages]);
 
   // Typewriter — advances the last assistant message's `revealedContent`
   // toward its full `content` at a paced rate. If the model is far ahead
@@ -207,6 +231,33 @@ export function ChatInterface() {
                 });
               }
 
+              if (
+                parsed.type === "listings" &&
+                Array.isArray(
+                  (parsed as { listings?: ListingResult[] }).listings,
+                )
+              ) {
+                const cast = parsed as unknown as {
+                  listings: ListingResult[];
+                  source: "rentcast" | "fallback";
+                  fallbackUrls?: { name: string; url: string }[];
+                };
+                setMessages((prev) => {
+                  const last = prev[prev.length - 1];
+                  return [
+                    ...prev.slice(0, -1),
+                    {
+                      ...last,
+                      listings: {
+                        listings: cast.listings,
+                        source: cast.source,
+                        fallbackUrls: cast.fallbackUrls,
+                      },
+                    },
+                  ];
+                });
+              }
+
               if (parsed.type === "plaid_connect") {
                 setMessages((prev) => {
                   const last = prev[prev.length - 1];
@@ -226,6 +277,8 @@ export function ChatInterface() {
                 const cast = parsed as unknown as {
                   offers: MortgageOfferLite[];
                   profile: MortgageProfileLite;
+                  baseRate?: number;
+                  baseRateSource?: "fred" | "fallback";
                 };
                 setMessages((prev) => {
                   const last = prev[prev.length - 1];
@@ -235,6 +288,13 @@ export function ChatInterface() {
                       ...last,
                       mortgageOffers: cast.offers,
                       mortgageProfile: cast.profile,
+                      mortgageRateMeta:
+                        cast.baseRate !== undefined && cast.baseRateSource
+                          ? {
+                              baseRate: cast.baseRate,
+                              baseRateSource: cast.baseRateSource,
+                            }
+                          : undefined,
                     },
                   ];
                 });
@@ -336,11 +396,22 @@ export function ChatInterface() {
                   <CallCard lead={message.leadAccepted} />
                 </div>
               )}
+              {message.listings && (
+                <div className="ml-10">
+                  <ListingsCard
+                    listings={message.listings.listings}
+                    source={message.listings.source}
+                    fallbackUrls={message.listings.fallbackUrls}
+                  />
+                </div>
+              )}
               {message.mortgageOffers && message.mortgageProfile && (
                 <div className="ml-10">
                   <MortgageOffersCard
                     offers={message.mortgageOffers}
                     profile={message.mortgageProfile}
+                    baseRate={message.mortgageRateMeta?.baseRate}
+                    baseRateSource={message.mortgageRateMeta?.baseRateSource}
                   />
                 </div>
               )}
