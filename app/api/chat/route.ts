@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { streamChatResponse } from "@/lib/claude";
-import { fetchInsuranceQuotes } from "@/lib/insurance";
+import { fetchInsuranceQuotes, buildHomeWarnings } from "@/lib/insurance";
 import {
   submitLeadToEverQuote,
   isEverQuoteConfigured,
   type AltoUserProfile,
 } from "@/lib/everquote";
-import { saveConversation, createServerClient } from "@/lib/supabase";
+// Note: server-side persistence was removed when we moved to Firestore.
+// Coverage saves now happen client-side from ChatInterface. EverQuote
+// stores its own copy of the lead (uuid is returned to the client).
 import {
   buildMortgageOffers,
   type MortgageProfile,
@@ -22,8 +24,10 @@ export async function POST(req: NextRequest) {
     messages: ChatMessage[];
     sessionId: string;
     userProfile?: Record<string, unknown>;
+    tier?: "free" | "pro" | "business";
   };
-  const { messages, sessionId, userProfile = {} } = body;
+  const { messages, sessionId, userProfile = {}, tier = "free" } = body;
+  const isFreeTier = tier === "free";
 
   const encoder = new TextEncoder();
 
@@ -73,24 +77,11 @@ export async function POST(req: NextRequest) {
                   const { response, earnedCents } =
                     await submitLeadToEverQuote(profile);
 
-                  // Best-effort persist
-                  try {
-                    const supabase = createServerClient();
-                    if (supabase) {
-                      await supabase.from("leads").insert({
-                        conversation_id: sessionId,
-                        provider: "everquote",
-                        vertical: profile.insurance_type,
-                        everquote_uuid: response.uuid,
-                        status: response.accept ? "accepted" : "rejected",
-                        bid_cents: response.bid_cents,
-                        duration_seconds: response.duration_seconds,
-                        referral_fee: earnedCents / 100,
-                      });
-                    }
-                  } catch {
-                    /* non-fatal */
-                  }
+                  // Lead is stored on EverQuote's side via response.uuid;
+                  // no server-side DB write here. earnedCents is bound
+                  // to the local closure so we can return it to the
+                  // client for analytics if/when needed.
+                  void earnedCents;
 
                   if (response.accept) {
                     send({
@@ -121,16 +112,24 @@ export async function POST(req: NextRequest) {
               }
             }
 
-            // 1.5 Plaid connect (mortgage flow)
+            // 1.5 Plaid connect (mortgage flow) — Pro only
             if (/<plaid_connect\s*\/?>/i.test(complete)) {
-              send({ type: "plaid_connect" });
+              if (isFreeTier) {
+                send({ type: "paywall", feature: "plaid" });
+              } else {
+                send({ type: "plaid_connect" });
+              }
             }
 
             // 1.75 Mortgage recommendations — fan out to lender deep links
+            // Pro/Business only.
             const mortgageMatch = complete.match(
               /<recommend_mortgage>([\s\S]*?)<\/recommend_mortgage>/,
             );
-            if (mortgageMatch) {
+            if (mortgageMatch && isFreeTier) {
+              send({ type: "paywall", feature: "mortgage" });
+            }
+            if (mortgageMatch && !isFreeTier) {
               try {
                 const profile = JSON.parse(
                   mortgageMatch[1],
@@ -160,11 +159,14 @@ export async function POST(req: NextRequest) {
               }
             }
 
-            // 1.9 Real estate listings — Rentcast + fallback
+            // 1.9 Real estate listings — Rentcast + fallback. Pro only.
             const listingsMatch = complete.match(
               /<fetch_listings>([\s\S]*?)<\/fetch_listings>/,
             );
-            if (listingsMatch) {
+            if (listingsMatch && isFreeTier) {
+              send({ type: "paywall", feature: "real_estate" });
+            }
+            if (listingsMatch && !isFreeTier) {
               try {
                 const params = JSON.parse(
                   listingsMatch[1],
@@ -212,22 +214,31 @@ export async function POST(req: NextRequest) {
                   };
                 }
                 const quotes = await fetchInsuranceQuotes(params);
-                send({ type: "quotes", quotes });
+                const warnings =
+                  params.type === "home"
+                    ? buildHomeWarnings(
+                        (params.profile ?? {}) as Parameters<
+                          typeof buildHomeWarnings
+                        >[0],
+                      )
+                    : [];
+                send({ type: "quotes", quotes, warnings });
               } catch (e) {
                 console.error("[chat] quote fetch failed:", e);
                 send({ type: "error", error: "Quote fetch failed." });
               }
             }
 
-            try {
-              await saveConversation(sessionId, messages, fullResponse, userProfile);
-            } catch (e) {
-              console.error("[chat] save conversation failed:", e);
-            }
+            // Conversation persistence is now client-side (Firestore via
+            // ChatInterface when the user is signed in). The server holds
+            // no DB.
+            void userProfile;
+            void fullResponse;
 
             controller.enqueue(encoder.encode("data: [DONE]\n\n"));
             controller.close();
           },
+          { tier },
         );
       } catch (e) {
         console.error("[chat] stream error:", e);

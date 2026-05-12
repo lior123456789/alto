@@ -30,6 +30,8 @@ interface UserProfile {
   age?: number;
   home_value?: number;
   home_age?: number;
+  /** "house" | "condo" | "townhome" etc — drives HO-3 vs HO-6 math. */
+  property_type?: string;
   coverage_amount?: number;
   currently_insured?: boolean;
   current_insurer?: string;
@@ -37,6 +39,32 @@ interface UserProfile {
   single_family?: boolean;
   months_insured?: number;
   military_service?: boolean;
+}
+
+// Florida coastal zip prefixes that trigger the catastrophe premium
+// uplift. 331=Miami, 334=Fort Lauderdale, 337=Tampa, 320=Jacksonville
+// metro, 322=NE Florida coastal.
+const FL_COASTAL_PREFIXES = ["331", "334", "337", "320", "322"];
+
+function isFLCoastal(zip?: string): boolean {
+  if (!zip) return false;
+  return FL_COASTAL_PREFIXES.some((p) => zip.startsWith(p));
+}
+
+export function buildHomeWarnings(profile: UserProfile): string[] {
+  const warnings: string[] = [];
+  const stateUC = (profile.state ?? "").toUpperCase();
+  if (stateUC === "FL") {
+    if (isFLCoastal(profile.zip_code)) {
+      warnings.push(
+        `⚠️ Standard condo and home insurance does NOT cover flood damage. ${profile.zip_code ?? "Coastal Florida"} is in a FEMA flood zone — ask your provider about separate flood coverage through NFIP or a private carrier. Average flood policy in Miami-Dade: $1,800–$3,500/year.`,
+      );
+    }
+    warnings.push(
+      "Note: some Florida policies exclude wind damage. Confirm your policy includes windstorm coverage or ask about a separate Citizens wind-only policy.",
+    );
+  }
+  return warnings;
 }
 
 // ─── Centralized provider ratings ────────────────────────────────────
@@ -64,9 +92,17 @@ const PROVIDER_RATINGS: Record<string, ProviderRating> = {
 
 function calculateCoverageAmounts(profile: UserProfile) {
   const homeValue = profile.home_value || 300000;
+  const isCondo =
+    profile.property_type?.toLowerCase() === "condo" ||
+    profile.single_family === false;
+  // HO-6 (condo) covers interior only — ~8% of value, capped at $150K.
+  // HO-3 (single-family) is dwelling-replacement, 80% of value.
+  const dwellingRaw = isCondo
+    ? Math.min(homeValue * 0.08, 150_000)
+    : homeValue * 0.8;
   return {
-    dwelling: Math.round((homeValue * 0.8) / 10000) * 10000,
-    liability: homeValue > 500000 ? 300000 : 100000,
+    dwelling: Math.round(dwellingRaw / 10000) * 10000,
+    liability: homeValue > 500_000 ? 300_000 : 100_000,
     deductible: profile.age && profile.age < 30 ? 1500 : 1000,
   };
 }
@@ -118,6 +154,10 @@ function calculateHomeRate(
 
   const stateUC = (profile.state ?? "").toUpperCase();
   if (HOME_STATE_MULT[stateUC]) price *= HOME_STATE_MULT[stateUC];
+
+  // FL coastal catastrophe premium — hurricane/flood exposure is real,
+  // private carriers price it 70-100% above inland FL.
+  if (stateUC === "FL" && isFLCoastal(profile.zip_code)) price *= 1.9;
 
   if (profile.home_age) {
     if (profile.home_age > 50) price *= 1.4;
@@ -294,7 +334,7 @@ function homeApplyUrl(provider: string, profile: UserProfile, dwelling: number):
   const common = { zip, state, utm_source: "alto", utm_medium: "ai_chat" };
   switch (provider) {
     case "Lemonade":     return "https://www.lemonade.com/homeowners" + qs({ ...common, coverage: dwelling });
-    case "Progressive":  return "https://www.progressive.com/homeowners/quote/" + qs({ ...common, coverage_amount: dwelling });
+    case "Progressive":  return "https://www.progressive.com/homeowners/";
     case "State Farm":   return "https://www.statefarm.com/insurance/home-and-property/homeowners" + qs(common);
     case "Citizens":     return "https://www.citizensfla.com/quote-application" + qs(common);
     case "Farmers":      return "https://www.farmers.com/homeowners-insurance/quote/" + qs({ ...common, coverage_amount: dwelling });
@@ -311,7 +351,7 @@ function autoApplyUrl(provider: string, profile: UserProfile): string {
   const common = { zip, state, utm_source: "alto" };
   switch (provider) {
     case "Geico":        return "https://www.geico.com/auto-insurance/" + qs(common);
-    case "Progressive":  return "https://www.progressive.com/auto/quote/" + qs(common);
+    case "Progressive":  return "https://www.progressive.com/auto/";
     case "State Farm":   return "https://www.statefarm.com/insurance/auto" + qs(common);
     case "Allstate":     return "https://www.allstate.com/auto-insurance/quote" + qs(common);
     case "USAA":         return "https://www.usaa.com/inet/wc/insurance_auto_main" + qs(common);
@@ -325,7 +365,7 @@ function rentersApplyUrl(provider: string, profile: UserProfile): string {
   const common = { zip, state, utm_source: "alto" };
   switch (provider) {
     case "Lemonade":     return "https://www.lemonade.com/renters" + qs(common);
-    case "Progressive":  return "https://www.progressive.com/renters/quote/" + qs(common);
+    case "Progressive":  return "https://www.progressive.com/renters/";
     case "State Farm":   return "https://www.statefarm.com/insurance/home-and-property/renters" + qs(common);
     case "Travelers":    return "https://www.travelers.com/renters-insurance/quote" + qs(common);
     default:             return "https://www.google.com/search?q=" + encodeURIComponent(`${provider} renters insurance quote`);

@@ -12,6 +12,7 @@ import {
   type Auth,
   type User,
 } from "firebase/auth";
+import { getFirestore, type Firestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -24,6 +25,7 @@ const firebaseConfig = {
 
 let _app: FirebaseApp | null = null;
 let _auth: Auth | null = null;
+let _db: Firestore | null = null;
 
 export function getFirebaseApp(): FirebaseApp | null {
   if (typeof window === "undefined") return null;
@@ -39,6 +41,14 @@ export function getFirebaseAuth(): Auth | null {
   if (!app) return null;
   _auth = getAuth(app);
   return _auth;
+}
+
+export function getFirebaseDb(): Firestore | null {
+  if (_db) return _db;
+  const app = getFirebaseApp();
+  if (!app) return null;
+  _db = getFirestore(app);
+  return _db;
 }
 
 export async function signInWithGoogle() {

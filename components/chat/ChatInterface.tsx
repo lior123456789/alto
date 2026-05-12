@@ -23,6 +23,7 @@ import { ListingsCard } from "./ListingsCard";
 import type { ListingResult } from "@/lib/realestate";
 import { saveCoverage, type SaveCoveragePayload } from "@/lib/coverage";
 import { Toast } from "@/components/ui/Toast";
+import { useSubscription, bumpConversationCount } from "@/lib/subscription";
 
 // Augment outgoing messages with bracketed summaries of any cards we
 // rendered, so Claude sees in history what was already shown to the user.
@@ -113,6 +114,7 @@ export function ChatInterface() {
   const autoSentRef = useRef(false);
   const prevMessageCountRef = useRef(messages.length);
   const savedThisTurnRef = useRef(false);
+  const { tier, limits, uid, loading: tierLoading } = useSubscription();
 
   // Scroll to bottom only when a NEW message arrives — not on every
   // typewriter tick, which previously caused scroll lag on long
@@ -178,6 +180,43 @@ export function ChatInterface() {
       const text = (override ?? input).trim();
       if (!text || isLoading) return;
 
+      // Free-tier monthly conversation cap. Counts user-initiated turns;
+      // first turn of a new conversation bumps the counter. Signed-in
+      // users are tracked in Firestore; anonymous users fall back to
+      // localStorage so the cap still applies pre-signup.
+      if (tier === "free" && !tierLoading) {
+        const isFirstUserTurn =
+          messages.filter((m) => m.role === "user").length === 0;
+        if (isFirstUserTurn) {
+          const cap = limits.maxConversationsPerMonth;
+          let count = 0;
+          if (uid) {
+            count = await bumpConversationCount(uid);
+          } else {
+            const key = "alto.convo.count.v1";
+            const monthKey = new Date().toISOString().slice(0, 7);
+            const raw = JSON.parse(
+              localStorage.getItem(key) ?? '{"m":"","n":0}',
+            ) as { m: string; n: number };
+            count = (raw.m === monthKey ? raw.n : 0) + 1;
+            localStorage.setItem(
+              key,
+              JSON.stringify({ m: monthKey, n: count }),
+            );
+          }
+          if (count > cap) {
+            const paywall: ChatMessage = {
+              role: "assistant",
+              content: `You've used ${cap}/${cap} free conversations this month. Upgrade to Pro for unlimited conversations + mortgage, real estate, and scenario modeling — $12/mo. Click Pricing or visit /billing to upgrade.`,
+              revealedContent: "",
+            };
+            setMessages([...messages, { role: "user", content: text }, paywall]);
+            setInput("");
+            return;
+          }
+        }
+      }
+
       const userMessage: ChatMessage = { role: "user", content: text };
       const newMessages = [...messages, userMessage];
       setMessages(newMessages);
@@ -193,6 +232,7 @@ export function ChatInterface() {
           body: JSON.stringify({
             messages: newMessages.map(serializeForApi),
             sessionId,
+            tier,
           }),
         });
         if (!response.body) throw new Error("No stream");
@@ -247,11 +287,18 @@ export function ChatInterface() {
                     const payload = JSON.parse(
                       saveMatch[1],
                     ) as SaveCoveragePayload;
-                    saveCoverage(payload, sessionId);
                     savedThisTurnRef.current = true;
-                    setToastMsg(
-                      `Saved ${payload.provider} to your dashboard`,
-                    );
+                    saveCoverage(payload, sessionId)
+                      .then(() => {
+                        setToastMsg(
+                          `Saved ${payload.provider} to your dashboard`,
+                        );
+                      })
+                      .catch((err: unknown) => {
+                        const msg =
+                          err instanceof Error ? err.message : "Save failed";
+                        setToastMsg(msg);
+                      });
                   } catch (e) {
                     console.warn("[save_coverage] parse failed:", e);
                   }
@@ -260,11 +307,16 @@ export function ChatInterface() {
 
               if (parsed.type === "quotes" && parsed.quotes) {
                 const quotes = parsed.quotes;
+                const quoteWarnings = Array.isArray(
+                  (parsed as { warnings?: string[] }).warnings,
+                )
+                  ? (parsed as { warnings?: string[] }).warnings
+                  : undefined;
                 setMessages((prev) => {
                   const last = prev[prev.length - 1];
                   return [
                     ...prev.slice(0, -1),
-                    { ...last, quotes },
+                    { ...last, quotes, quoteWarnings },
                   ];
                 });
               }
@@ -327,6 +379,28 @@ export function ChatInterface() {
                 });
               }
 
+              if (parsed.type === "paywall") {
+                const feature =
+                  (parsed as { feature?: string }).feature ?? "this feature";
+                const labels: Record<string, string> = {
+                  mortgage: "mortgage shopping",
+                  real_estate: "real estate search",
+                  plaid: "bank-linking with Plaid",
+                };
+                const featureLabel = labels[feature] ?? feature;
+                setMessages((prev) => {
+                  const last = prev[prev.length - 1];
+                  const note = `\n\n${featureLabel} is a Pro feature. Upgrade at /billing for $12/mo to unlock mortgage, real estate, bank-linking, scenarios, and unlimited conversations.`;
+                  return [
+                    ...prev.slice(0, -1),
+                    {
+                      ...last,
+                      content: (last.content ?? "") + note,
+                    },
+                  ];
+                });
+              }
+
               if (
                 parsed.type === "mortgage_offers" &&
                 Array.isArray(
@@ -374,7 +448,7 @@ export function ChatInterface() {
         setIsLoading(false);
       }
     },
-    [input, messages, isLoading, sessionId],
+    [input, messages, isLoading, sessionId, tier, limits, uid, tierLoading],
   );
 
   useEffect(() => {
@@ -491,6 +565,19 @@ export function ChatInterface() {
               )}
               {message.quotes && message.quotes.length > 0 && (
                 <div className="ml-10 space-y-3">
+                  {message.quoteWarnings &&
+                    message.quoteWarnings.length > 0 && (
+                      <div className="space-y-2">
+                        {message.quoteWarnings.map((w, i) => (
+                          <div
+                            key={i}
+                            className="rounded-xl border border-amber-400/30 bg-amber-500/10 text-amber-100 text-[13px] leading-relaxed px-4 py-3"
+                          >
+                            {w}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   {message.quotes.map((quote, j) => (
                     <QuoteCard
                       key={quote.provider}

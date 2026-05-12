@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import {
-  listCoverage,
+  subscribeCoverage,
   updateCoverageStatus,
   deleteCoverage,
   type CoverageItem,
@@ -22,10 +22,12 @@ export default function CoverageDashboardPage() {
   const [items, setItems] = useState<CoverageItem[]>([]);
 
   useEffect(() => {
-    setItems(listCoverage());
+    return subscribeCoverage(setItems);
   }, []);
 
-  const refresh = () => setItems(listCoverage());
+  // Firestore snapshot keeps `items` live; the action callbacks below
+  // simply mutate the store and the snapshot pushes the update back.
+  const refresh = () => {};
 
   const totalMonthly = items.reduce((s, i) => s + i.monthly_price, 0);
   const annualSpend = totalMonthly * 12;
@@ -129,13 +131,13 @@ function CoverageCard({
   item: CoverageItem;
   onChange: () => void;
 }) {
-  const onSetActive = () => {
-    updateCoverageStatus(item.id, "active");
+  const onSetActive = async () => {
+    await updateCoverageStatus(item.id, "active");
     onChange();
   };
-  const onDelete = () => {
+  const onDelete = async () => {
     if (confirm(`Remove ${item.provider} from your dashboard?`)) {
-      deleteCoverage(item.id);
+      await deleteCoverage(item.id);
       onChange();
     }
   };

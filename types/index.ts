@@ -86,6 +86,7 @@ export interface ChatMessage {
   /** Typewriter progress — assistant only. Prefix of `content` that's currently visible. */
   revealedContent?: string;
   quotes?: InsuranceQuote[];
+  quoteWarnings?: string[];
   leadAccepted?: LeadAccepted;
   plaidConnect?: boolean;
   plaidSummary?: PlaidSummary;

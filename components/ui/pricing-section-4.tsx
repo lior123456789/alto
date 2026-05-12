@@ -8,8 +8,20 @@ import { cn } from "@/lib/utils";
 import NumberFlow from "@number-flow/react";
 import { motion } from "framer-motion";
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  getFirebaseAuth,
+  signInWithGoogle,
+  onAuthStateChanged,
+} from "@/lib/firebase";
+import {
+  setUserTier,
+  useSubscription,
+  type SubscriptionTier,
+} from "@/lib/subscription";
 
 interface Plan {
+  id: "free" | "pro" | "business";
   name: string;
   description: string;
   price: number;
@@ -22,26 +34,28 @@ interface Plan {
 
 const plans: Plan[] = [
   {
+    id: "free",
     name: "Free",
     description:
-      "Talk to Alto, get recommendations, and connect to providers. No commitment.",
+      "Try Alto for a single insurance quote. Limited usage, no commitment.",
     price: 0,
     yearlyPrice: 0,
     buttonText: "Start free",
     buttonVariant: "outline",
     includes: [
       "Free includes:",
-      "Unlimited Alto conversations",
-      "Insurance · mortgage · real estate flows",
-      "Live partner connections",
-      "Quote pre-fill on every recommendation",
-      "Bank-link with Plaid for accurate mortgage rates",
+      "5 conversations per month",
+      "Insurance quotes only (home · auto · renters)",
+      "1 saved coverage item",
+      "Standard provider list",
+      "No bank-linking, no mortgage, no real estate",
     ],
   },
   {
+    id: "pro",
     name: "Pro",
     description:
-      "Save your conversations, run side-by-side scenario modeling, and unlock deeper analyses.",
+      "Everything Alto can do — insurance, mortgage, real estate, scenario modeling, saved history.",
     price: 12,
     yearlyPrice: 99,
     buttonText: "Upgrade to Pro",
@@ -49,18 +63,21 @@ const plans: Plan[] = [
     popular: true,
     includes: [
       "Everything in Free, plus:",
-      "Saved conversation history",
-      "Scenario comparison (refi vs. hold, etc.)",
-      "Personalized rate alerts",
-      "Priority routing to top-rated lenders",
+      "Unlimited conversations",
+      "Mortgage rate shopping + Plaid bank-link",
+      "Real estate listing search (Rentcast + national MLS)",
+      "Unlimited coverage dashboard",
+      "Scenario comparison (refi vs. hold, rent vs. buy)",
+      "Personalized rate alerts + saved history",
       "Export reports (PDF + CSV)",
     ],
   },
   {
+    id: "business",
     name: "Business",
     description:
       "For brokerages and teams that want Alto white-labeled to their clients.",
-    price: 96,
+    price: 99,
     yearlyPrice: 899,
     buttonText: "Talk to sales",
     buttonVariant: "outline",
@@ -132,7 +149,91 @@ const PricingSwitch = ({
 
 export default function AltoPricingSection() {
   const [isYearly, setIsYearly] = useState(false);
+  const [busyPlan, setBusyPlan] = useState<string | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
   const pricingRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const { tier: currentTier, uid } = useSubscription();
+
+  const ensureSignedIn = async (): Promise<string | null> => {
+    const auth = getFirebaseAuth();
+    if (!auth) {
+      setErrMsg("Auth isn't configured");
+      return null;
+    }
+    if (auth.currentUser) return auth.currentUser.uid;
+    try {
+      const cred = await signInWithGoogle();
+      return cred.user.uid;
+    } catch {
+      // Wait for popup to resolve via auth state in case of race
+      return new Promise<string | null>((resolve) => {
+        const off = onAuthStateChanged(auth, (u) => {
+          off();
+          resolve(u?.uid ?? null);
+        });
+        setTimeout(() => resolve(null), 5000);
+      });
+    }
+  };
+
+  const handleUpgrade = async (plan: Plan) => {
+    setErrMsg(null);
+    if (plan.id === "free") {
+      router.push("/chat");
+      return;
+    }
+    if (plan.id === "business") {
+      window.location.href =
+        "mailto:paul@nemapp.com?subject=Alto%20Business%20-%20demo%20request";
+      return;
+    }
+    setBusyPlan(plan.id);
+    try {
+      const signedInUid = uid ?? (await ensureSignedIn());
+      const email = getFirebaseAuth()?.currentUser?.email ?? null;
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan: plan.id,
+          period: isYearly ? "yearly" : "monthly",
+          uid: signedInUid,
+          email,
+        }),
+      });
+      const data = (await res.json()) as {
+        mode?: "stripe" | "dev_flip";
+        url?: string;
+        tier?: SubscriptionTier;
+        reason?: string;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error ?? "Checkout failed");
+
+      if (data.mode === "stripe" && data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      // Dev fallback — no Stripe price IDs configured. Flip the tier
+      // directly so the upgrade button still produces a visible effect
+      // for local dev / pre-launch testing.
+      if (data.mode === "dev_flip" && data.tier) {
+        if (!signedInUid) {
+          setErrMsg("Sign in to upgrade");
+          return;
+        }
+        await setUserTier(signedInUid, data.tier);
+        router.push("/billing/success?dev=1");
+        return;
+      }
+      setErrMsg("Couldn't start checkout");
+    } catch (e) {
+      setErrMsg(e instanceof Error ? e.message : "Checkout failed");
+    } finally {
+      setBusyPlan(null);
+    }
+  };
 
   const revealVariants = {
     visible: (i: number) => ({
@@ -281,14 +382,20 @@ export default function AltoPricingSection() {
 
               <CardContent className="pt-0">
                 <button
+                  onClick={() => handleUpgrade(plan)}
+                  disabled={busyPlan === plan.id || currentTier === plan.id}
                   className={cn(
-                    "w-full mb-6 p-4 text-base rounded-xl transition-colors",
+                    "w-full mb-6 p-4 text-base rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed",
                     plan.popular
                       ? "bg-gradient-to-t from-sky-500 to-sky-400 shadow-lg shadow-sky-800 border border-sky-500 text-white hover:from-sky-400 hover:to-sky-300"
                       : "bg-gradient-to-t from-slate-950 to-slate-800 shadow-lg shadow-slate-950 border border-white/10 text-white hover:from-neutral-900 hover:to-neutral-600",
                   )}
                 >
-                  {plan.buttonText}
+                  {busyPlan === plan.id
+                    ? "Loading…"
+                    : currentTier === plan.id && plan.id !== "free"
+                      ? "Your current plan"
+                      : plan.buttonText}
                 </button>
 
                 <div className="space-y-3 pt-4 border-t border-white/[0.06]">
@@ -309,6 +416,11 @@ export default function AltoPricingSection() {
           </TimelineContent>
         ))}
       </div>
+      {errMsg && (
+        <p className="relative z-10 mx-auto max-w-md text-center text-sm text-rose-300 mt-4 px-4">
+          {errMsg}
+        </p>
+      )}
     </div>
   );
 }

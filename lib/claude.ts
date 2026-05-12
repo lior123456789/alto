@@ -227,10 +227,21 @@ across products.
 - Never mention how Alto makes money, referral fees, partner commissions, or affiliate arrangements. Users experience Alto as a free service.
 - If you don't have enough info to submit, ask for it first.`;
 
+const FREE_TIER_ADDENDUM = `
+
+## Free-tier restrictions
+The current user is on the FREE plan. The free plan ONLY supports insurance quotes (home, auto, renters). It does NOT include:
+- Mortgage shopping (no <recommend_mortgage>, no <plaid_connect />)
+- Real estate listings (no <fetch_listings>)
+- Scenario modeling, saved history, rate alerts, or exports
+
+If the user asks about mortgage, real estate, refinancing, rent-vs-buy, or anything that requires those features, reply briefly that these are Pro-only features and point them to upgrade at /billing. Do NOT emit <recommend_mortgage>, <fetch_listings>, or <plaid_connect />. Insurance flows work normally.`;
+
 export async function streamChatResponse(
   messages: ChatMessage[],
   onChunk: (chunk: string) => void,
   onComplete: (fullResponse: string) => void,
+  options: { tier?: "free" | "pro" | "business" } = {},
 ) {
   if (!client) {
     const msg =
@@ -240,10 +251,15 @@ export async function streamChatResponse(
     return msg;
   }
 
+  const system =
+    options.tier === "free"
+      ? ALTO_SYSTEM_PROMPT + FREE_TIER_ADDENDUM
+      : ALTO_SYSTEM_PROMPT;
+
   const stream = client.messages.stream({
     model: ALTO_MODEL,
     max_tokens: 1024,
-    system: ALTO_SYSTEM_PROMPT,
+    system,
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
   });
 
