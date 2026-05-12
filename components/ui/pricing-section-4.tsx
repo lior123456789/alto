@@ -87,12 +87,12 @@ const PricingSwitch = ({
   };
   return (
     <div className="flex justify-center">
-      <div className="relative z-10 mx-auto flex w-fit rounded-full bg-neutral-900 border border-gray-700 p-1">
+      <div className="relative z-10 mx-auto flex w-fit rounded-full bg-slate-900/60 border border-white/10 p-1">
         <button
           onClick={() => handleSwitch("0")}
           className={cn(
-            "relative z-10 w-fit h-10 rounded-full sm:px-6 px-3 sm:py-2 py-1 font-medium transition-colors",
-            selected === "0" ? "text-white" : "text-gray-300",
+            "relative z-10 w-fit h-10 rounded-full sm:px-6 px-3 sm:py-2 py-1 font-medium transition-colors text-sm",
+            selected === "0" ? "text-white" : "text-white/60",
           )}
         >
           {selected === "0" && (
@@ -107,8 +107,8 @@ const PricingSwitch = ({
         <button
           onClick={() => handleSwitch("1")}
           className={cn(
-            "relative z-10 w-fit h-10 flex-shrink-0 rounded-full sm:px-6 px-3 sm:py-2 py-1 font-medium transition-colors",
-            selected === "1" ? "text-white" : "text-gray-300",
+            "relative z-10 w-fit h-10 flex-shrink-0 rounded-full sm:px-6 px-3 sm:py-2 py-1 font-medium transition-colors text-sm",
+            selected === "1" ? "text-white" : "text-white/60",
           )}
         >
           {selected === "1" && (
@@ -149,7 +149,7 @@ export default function AltoPricingSection() {
 
   return (
     <div
-      className="min-h-screen mx-auto relative bg-black overflow-x-hidden"
+      className="mx-auto relative bg-[#050507] overflow-x-hidden py-32"
       ref={pricingRef}
     >
       <TimelineContent
@@ -193,7 +193,7 @@ export default function AltoPricingSection() {
         </div>
       </TimelineContent>
 
-      <article className="text-center mb-6 pt-32 max-w-3xl mx-auto space-y-2 relative z-50 px-6">
+      <article className="text-center mb-6 max-w-3xl mx-auto space-y-2 relative z-50 px-6">
         <h2 className="text-4xl font-medium text-white">
           <VerticalCutReveal
             splitBy="words"
@@ -234,11 +234,10 @@ export default function AltoPricingSection() {
       </article>
 
       <div
-        className="absolute top-0 left-[10%] right-[10%] w-[80%] h-full z-0"
+        className="absolute top-0 left-[10%] right-[10%] w-[80%] h-full z-0 pointer-events-none"
         style={{
           backgroundImage:
-            "radial-gradient(circle at center, #0ea5e9 0%, transparent 70%)",
-          opacity: 0.3,
+            "radial-gradient(circle at center, rgba(14,165,233,0.35) 0%, transparent 70%)",
           mixBlendMode: "screen",
         }}
       />
@@ -254,10 +253,10 @@ export default function AltoPricingSection() {
           >
             <Card
               className={cn(
-                "relative text-white border-neutral-800 h-full",
+                "relative text-white border-white/[0.06] h-full",
                 plan.popular
-                  ? "bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 shadow-[0px_-13px_300px_0px_#0ea5e9] z-20"
-                  : "bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 z-10",
+                  ? "bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 shadow-[0px_-13px_300px_0px_#0ea5e9] z-20"
+                  : "bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 z-10",
               )}
             >
               <CardHeader className="text-left">
@@ -286,13 +285,13 @@ export default function AltoPricingSection() {
                     "w-full mb-6 p-4 text-base rounded-xl transition-colors",
                     plan.popular
                       ? "bg-gradient-to-t from-sky-500 to-sky-400 shadow-lg shadow-sky-800 border border-sky-500 text-white hover:from-sky-400 hover:to-sky-300"
-                      : "bg-gradient-to-t from-neutral-950 to-neutral-700 shadow-lg shadow-neutral-900 border border-neutral-700 text-white hover:from-neutral-900 hover:to-neutral-600",
+                      : "bg-gradient-to-t from-slate-950 to-slate-800 shadow-lg shadow-slate-950 border border-white/10 text-white hover:from-neutral-900 hover:to-neutral-600",
                   )}
                 >
                   {plan.buttonText}
                 </button>
 
-                <div className="space-y-3 pt-4 border-t border-neutral-700">
+                <div className="space-y-3 pt-4 border-t border-white/[0.06]">
                   <h4 className="font-medium text-base mb-3">
                     {plan.includes[0]}
                   </h4>

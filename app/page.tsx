@@ -6,6 +6,7 @@ import { AnimatedAIChat } from "@/components/ui/animated-ai-chat";
 import { ContainerScroll } from "@/components/ui/container-scroll-animation";
 import FlowArt, { FlowSection } from "@/components/ui/story-scroll";
 import { ScrollTiltedGrid } from "@/components/ui/scroll-tilted-grid";
+import AltoPricingSection from "@/components/ui/pricing-section-4";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { Sparkles } from "lucide-react";
 
@@ -20,12 +21,12 @@ export default function LandingPage() {
     <main className="bg-[#050507] text-white">
       {/* Top-right floating nav (no logo) */}
       <div className="fixed top-5 right-6 z-50 flex items-center gap-5">
-        <Link
-          href="/billing"
+        <a
+          href="#pricing"
           className="text-sm font-medium text-white/70 hover:text-white"
         >
           Pricing
-        </Link>
+        </a>
         <AuthButton />
         <Link
           href="/chat"
@@ -296,6 +297,11 @@ export default function LandingPage() {
           </div>
         </FlowSection>
       </FlowArt>
+
+      {/* PRICING — embedded on the landing, deep-linked from nav */}
+      <section id="pricing" className="bg-[#050507]">
+        <AltoPricingSection />
+      </section>
 
       {/* TRUSTED BY — ScrollTiltedGrid as a visual flourish */}
       <section className="bg-black border-t border-white/[0.05]">
