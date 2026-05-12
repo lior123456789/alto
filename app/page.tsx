@@ -21,6 +21,12 @@ export default function LandingPage() {
     <main className="bg-[#050507] text-white">
       {/* Top-right floating nav (no logo) */}
       <div className="fixed top-5 right-6 z-50 flex items-center gap-5">
+        <Link
+          href="/dashboard/coverage"
+          className="text-sm font-medium text-white/70 hover:text-white"
+        >
+          My Coverage
+        </Link>
         <a
           href="#pricing"
           className="text-sm font-medium text-white/70 hover:text-white"

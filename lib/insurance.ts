@@ -1,4 +1,22 @@
-import type { InsuranceQuote, FetchQuotesParams } from "@/types";
+import type {
+  InsuranceQuote,
+  FetchQuotesParams,
+  AutoCoverage,
+} from "@/types";
+
+// ─── Seeded-random variance ──────────────────────────────────────────
+// Math.random() makes every render show different prices for the same
+// profile. Seed it by (provider + sessionId) so the same user sees the
+// same numbers every time within a session.
+function seededVariance(provider: string, sessionId: string | undefined) {
+  const seed =
+    provider.split("").reduce((a, c) => a + c.charCodeAt(0), 0) +
+    (sessionId ?? "default-session")
+      .split("")
+      .reduce((a, c) => a + c.charCodeAt(0), 0);
+  const seededRandom = ((seed * 9301 + 49297) % 233280) / 233280;
+  return 0.92 + seededRandom * 0.16; // ±8% deterministic spread
+}
 
 // ─── User profile shape (everything Claude can put in <fetch_quotes>) ───
 
@@ -82,7 +100,12 @@ const HOME_STATE_MULT: Record<string, number> = {
   OH: 0.9, VT: 0.8, ME: 0.75,
 };
 
-function calculateHomeRate(base: number, profile: UserProfile): number {
+function calculateHomeRate(
+  base: number,
+  profile: UserProfile,
+  provider: string,
+  sessionId?: string,
+): number {
   let price = base;
 
   if (profile.home_value) {
@@ -107,7 +130,7 @@ function calculateHomeRate(base: number, profile: UserProfile): number {
   if (profile.months_insured && profile.months_insured > 24) price *= 0.93;
   if (profile.currently_insured) price *= 0.95;
 
-  price *= 0.92 + Math.random() * 0.16;
+  price *= seededVariance(provider, sessionId);
   return Math.max(15, Math.round(price));
 }
 
@@ -126,7 +149,12 @@ const AUTO_STATE_MULT: Record<string, number> = {
   CA: 1.4, TX: 1.3, OH: 0.9, ME: 0.8, VT: 0.75,
 };
 
-function calculateAutoRate(base: number, profile: UserProfile): number {
+function calculateAutoRate(
+  base: number,
+  profile: UserProfile,
+  provider: string,
+  sessionId?: string,
+): number {
   let price = base;
 
   if (profile.age) {
@@ -148,7 +176,7 @@ function calculateAutoRate(base: number, profile: UserProfile): number {
   if (profile.months_insured && profile.months_insured > 24) price *= 0.93;
   if (profile.months_insured && profile.months_insured > 60) price *= 0.88;
 
-  price *= 0.9 + Math.random() * 0.2;
+  price *= seededVariance(provider, sessionId);
   return Math.max(20, Math.round(price));
 }
 
@@ -159,12 +187,17 @@ const RENTERS_STATE_MULT: Record<string, number> = {
   FL: 1.4, CA: 1.3, NY: 1.3, TX: 1.1, OH: 0.85, ME: 0.8,
 };
 
-function calculateRentersRate(base: number, profile: UserProfile): number {
+function calculateRentersRate(
+  base: number,
+  profile: UserProfile,
+  provider: string,
+  sessionId?: string,
+): number {
   let price = base;
   const stateUC = (profile.state ?? "").toUpperCase();
   if (RENTERS_STATE_MULT[stateUC]) price *= RENTERS_STATE_MULT[stateUC];
   if (profile.age && profile.age < 25) price *= 1.15;
-  price *= 0.9 + Math.random() * 0.2;
+  price *= seededVariance(provider, sessionId);
   return Math.max(8, Math.round(price));
 }
 
@@ -306,64 +339,70 @@ export async function fetchInsuranceQuotes(
 ): Promise<InsuranceQuote[]> {
   const profile = (params.profile ?? {}) as UserProfile;
   const type = params.type ?? "home";
+  const sessionId = params.sessionId;
 
   console.log(
-    `[fetchInsuranceQuotes] type=${type} userProfile:`,
+    `[fetchInsuranceQuotes] type=${type} sessionId=${sessionId} userProfile:`,
     profile,
   );
 
-  if (type === "auto") return getAutoQuotes(profile);
-  if (type === "renters") return getRentersQuotes(profile);
-  return getHomeQuotes(profile);
+  if (type === "auto") return getAutoQuotes(profile, sessionId);
+  if (type === "renters") return getRentersQuotes(profile, sessionId);
+  return getHomeQuotes(profile, sessionId);
 }
 
-function getHomeQuotes(profile: UserProfile): InsuranceQuote[] {
+function getHomeQuotes(
+  profile: UserProfile,
+  sessionId?: string,
+): InsuranceQuote[] {
   const state = (profile.state ?? "").toUpperCase();
   const providers = homeProvidersByState[state] ?? homeProvidersByState.DEFAULT;
   const coverage = calculateCoverageAmounts(profile);
 
-  return providers
-    .map((provider) => {
-      const base = HOME_BASES[provider];
-      if (!base) return null;
-      const monthlyPrice = calculateHomeRate(base, profile);
-      const r = PROVIDER_RATINGS[provider] ?? {
-        rating: 4.0,
-        claimsRating: "Good" as const,
-        amBest: "A",
-      };
-      return {
-        provider,
-        providerLogo: `/logos/${provider.toLowerCase().replace(/\s+/g, "")}.svg`,
-        monthlyPrice,
-        annualPrice: monthlyPrice * 12,
-        coverage,
-        highlights: getProviderHighlights(provider, profile),
-        applyUrl: homeApplyUrl(provider, profile, coverage.dwelling),
-        rating: r.rating,
-        claimsRating: r.claimsRating,
-      } satisfies InsuranceQuote;
-    })
-    .filter((q): q is InsuranceQuote => q !== null)
-    .sort((a, b) => a.monthlyPrice - b.monthlyPrice);
+  const built: InsuranceQuote[] = [];
+  for (const provider of providers) {
+    const base = HOME_BASES[provider];
+    if (!base) continue;
+    const monthlyPrice = calculateHomeRate(base, profile, provider, sessionId);
+    const r = PROVIDER_RATINGS[provider] ?? {
+      rating: 4.0,
+      claimsRating: "Good" as const,
+      amBest: "A",
+    };
+    built.push({
+      provider,
+      providerLogo: `/logos/${provider.toLowerCase().replace(/\s+/g, "")}.svg`,
+      monthlyPrice,
+      annualPrice: monthlyPrice * 12,
+      type: "home",
+      coverage,
+      highlights: getProviderHighlights(provider, profile),
+      applyUrl: homeApplyUrl(provider, profile, coverage.dwelling),
+      rating: r.rating,
+      claimsRating: r.claimsRating,
+    });
+  }
+  return built.sort((a, b) => a.monthlyPrice - b.monthlyPrice);
 }
 
-function getAutoQuotes(profile: UserProfile): InsuranceQuote[] {
+function getAutoQuotes(
+  profile: UserProfile,
+  sessionId?: string,
+): InsuranceQuote[] {
   let providers = AUTO_PROVIDERS;
   if (!profile.military_service) {
     providers = providers.filter((p) => !p.militaryOnly);
   }
-  // Auto doesn't use dwelling/liability/deductible in the same way; we
-  // surface placeholders that the user understands.
-  const coverage = {
-    dwelling: 0,
-    liability: 100_000,
-    deductible: profile.age && profile.age < 25 ? 1000 : 500,
+  const autoCoverage: AutoCoverage = {
+    liability: "$100K per accident",
+    collision: "$500 deductible",
+    comprehensive: "$500 deductible",
+    uninsuredMotorist: "Included",
   };
 
   return providers
     .map(({ provider, base }) => {
-      const monthlyPrice = calculateAutoRate(base, profile);
+      const monthlyPrice = calculateAutoRate(base, profile, provider, sessionId);
       const r = PROVIDER_RATINGS[provider] ?? {
         rating: 4.0,
         claimsRating: "Good" as const,
@@ -374,7 +413,13 @@ function getAutoQuotes(profile: UserProfile): InsuranceQuote[] {
         providerLogo: `/logos/${provider.toLowerCase().replace(/\s+/g, "")}.svg`,
         monthlyPrice,
         annualPrice: monthlyPrice * 12,
-        coverage,
+        type: "auto" as const,
+        coverage: {
+          dwelling: 0,
+          liability: 100_000,
+          deductible: profile.age && profile.age < 25 ? 1000 : 500,
+        },
+        autoCoverage,
         highlights: getProviderHighlights(provider, profile),
         applyUrl: autoApplyUrl(provider, profile),
         rating: r.rating,
@@ -384,17 +429,20 @@ function getAutoQuotes(profile: UserProfile): InsuranceQuote[] {
     .sort((a, b) => a.monthlyPrice - b.monthlyPrice);
 }
 
-function getRentersQuotes(profile: UserProfile): InsuranceQuote[] {
+function getRentersQuotes(
+  profile: UserProfile,
+  sessionId?: string,
+): InsuranceQuote[] {
   const providers = ["Lemonade", "Progressive", "State Farm", "Travelers"];
-  const coverage = {
-    dwelling: 0,
-    liability: 100_000,
-    deductible: 500,
-  };
 
   return providers
     .map((provider) => {
-      const monthlyPrice = calculateRentersRate(RENTERS_BASE, profile);
+      const monthlyPrice = calculateRentersRate(
+        RENTERS_BASE,
+        profile,
+        provider,
+        sessionId,
+      );
       const r = PROVIDER_RATINGS[provider] ?? {
         rating: 4.0,
         claimsRating: "Good" as const,
@@ -405,7 +453,12 @@ function getRentersQuotes(profile: UserProfile): InsuranceQuote[] {
         providerLogo: `/logos/${provider.toLowerCase().replace(/\s+/g, "")}.svg`,
         monthlyPrice,
         annualPrice: monthlyPrice * 12,
-        coverage,
+        type: "renters" as const,
+        coverage: {
+          dwelling: 0,
+          liability: 100_000,
+          deductible: 500,
+        },
         highlights: getProviderHighlights(provider, profile),
         applyUrl: rentersApplyUrl(provider, profile),
         rating: r.rating,

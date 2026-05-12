@@ -21,6 +21,45 @@ import type {
 import { MortgageOffersCard } from "./MortgageOffersCard";
 import { ListingsCard } from "./ListingsCard";
 import type { ListingResult } from "@/lib/realestate";
+import { saveCoverage, type SaveCoveragePayload } from "@/lib/coverage";
+import { Toast } from "@/components/ui/Toast";
+
+// Augment outgoing messages with bracketed summaries of any cards we
+// rendered, so Claude sees in history what was already shown to the user.
+// Without this, the model loses track and says "I haven't shown you any
+// quotes" even though the UI clearly displayed them.
+function serializeForApi(m: ChatMessage): { role: string; content: string } {
+  let content = m.content;
+  if (m.quotes && m.quotes.length > 0) {
+    const summary = m.quotes
+      .map(
+        (q) =>
+          `${q.provider} $${q.monthlyPrice}/mo (${q.type ?? "insurance"})`,
+      )
+      .join(", ");
+    content += `\n[Shown to user — quote cards: ${summary}]`;
+  }
+  if (m.mortgageOffers && m.mortgageOffers.length > 0) {
+    const summary = m.mortgageOffers
+      .map((o) => `${o.lender} ${o.estimatedRate30}% 30yr`)
+      .join(", ");
+    content += `\n[Shown to user — mortgage offers: ${summary}]`;
+  }
+  if (m.listings && m.listings.listings.length > 0) {
+    const summary = m.listings.listings
+      .slice(0, 3)
+      .map((l) => `${l.addressLine1} $${l.price.toLocaleString()}/mo`)
+      .join(", ");
+    content += `\n[Shown to user — listings: ${summary}]`;
+  }
+  if (m.plaidSummary) {
+    content += `\n[Plaid summary captured: cash $${m.plaidSummary.totalCash}, monthly income $${m.plaidSummary.monthlyIncomeEstimate}]`;
+  }
+  if (m.leadAccepted) {
+    content += `\n[EverQuote lead accepted for ${m.leadAccepted.vertical}, call number rendered]`;
+  }
+  return { role: m.role, content };
+}
 
 const INITIAL: ChatMessage = {
   role: "assistant",
@@ -39,6 +78,7 @@ function stripDisplay(raw: string): string {
     .replace(/<plaid_connect\s*\/?>/gi, "")
     .replace(/<recommend_mortgage>[\s\S]*?<\/recommend_mortgage>/g, "")
     .replace(/<fetch_listings>[\s\S]*?<\/fetch_listings>/g, "")
+    .replace(/<save_coverage>[\s\S]*?<\/save_coverage>/g, "")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "$1")
     .replace(/__([^_]+)__/g, "$1")
@@ -60,6 +100,7 @@ export function ChatInterface() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [statusLabel, setStatusLabel] = useState<string>("Thinking");
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [sessionId] = useState(() =>
     typeof crypto !== "undefined" && crypto.randomUUID
       ? crypto.randomUUID()
@@ -71,6 +112,7 @@ export function ChatInterface() {
   const initialQuery = searchParams?.get("q") ?? null;
   const autoSentRef = useRef(false);
   const prevMessageCountRef = useRef(messages.length);
+  const savedThisTurnRef = useRef(false);
 
   // Scroll to bottom only when a NEW message arrives — not on every
   // typewriter tick, which previously caused scroll lag on long
@@ -142,16 +184,14 @@ export function ChatInterface() {
       setInput("");
       setIsLoading(true);
       setStatusLabel("Thinking");
+      savedThisTurnRef.current = false;
 
       try {
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: newMessages.map((m) => ({
-              role: m.role,
-              content: m.content,
-            })),
+            messages: newMessages.map(serializeForApi),
             sessionId,
           }),
         });
@@ -197,6 +237,25 @@ export function ChatInterface() {
                   ...prev.slice(0, -1),
                   { ...prev[prev.length - 1], content: display },
                 ]);
+
+                // Watch for <save_coverage> completion mid-stream
+                const saveMatch = assistantContent.match(
+                  /<save_coverage>([\s\S]*?)<\/save_coverage>/,
+                );
+                if (saveMatch && !savedThisTurnRef.current) {
+                  try {
+                    const payload = JSON.parse(
+                      saveMatch[1],
+                    ) as SaveCoveragePayload;
+                    saveCoverage(payload, sessionId);
+                    savedThisTurnRef.current = true;
+                    setToastMsg(
+                      `Saved ${payload.provider} to your dashboard`,
+                    );
+                  } catch (e) {
+                    console.warn("[save_coverage] parse failed:", e);
+                  }
+                }
               }
 
               if (parsed.type === "quotes" && parsed.quotes) {
@@ -277,8 +336,10 @@ export function ChatInterface() {
                 const cast = parsed as unknown as {
                   offers: MortgageOfferLite[];
                   profile: MortgageProfileLite;
-                  baseRate?: number;
-                  baseRateSource?: "fred" | "fallback";
+                  baseRate30?: number;
+                  baseRate15?: number;
+                  baseRateSource?: "freddiemac" | "fred" | "fallback";
+                  baseRateAsOf?: string;
                 };
                 setMessages((prev) => {
                   const last = prev[prev.length - 1];
@@ -289,10 +350,14 @@ export function ChatInterface() {
                       mortgageOffers: cast.offers,
                       mortgageProfile: cast.profile,
                       mortgageRateMeta:
-                        cast.baseRate !== undefined && cast.baseRateSource
+                        cast.baseRate30 !== undefined &&
+                        cast.baseRate15 !== undefined &&
+                        cast.baseRateSource
                           ? {
-                              baseRate: cast.baseRate,
+                              baseRate30: cast.baseRate30,
+                              baseRate15: cast.baseRate15,
                               baseRateSource: cast.baseRateSource,
+                              baseRateAsOf: cast.baseRateAsOf,
                             }
                           : undefined,
                     },
@@ -346,6 +411,7 @@ export function ChatInterface() {
 
   return (
     <div className="flex flex-col h-screen w-full bg-black text-white relative overflow-hidden">
+      <Toast message={toastMsg} onDismiss={() => setToastMsg(null)} />
       {/* Header */}
       <header className="relative z-10 px-6 py-4 flex items-center justify-between border-b border-white/[0.04]">
         <Link
@@ -360,6 +426,12 @@ export function ChatInterface() {
           <span className="text-[15px] font-semibold tracking-tight">Alto</span>
         </div>
         <div className="flex items-center gap-5">
+          <Link
+            href="/dashboard/coverage"
+            className="text-sm font-medium text-white/60 hover:text-white"
+          >
+            Coverage
+          </Link>
           <Link
             href="/billing"
             className="text-sm font-medium text-white/60 hover:text-white"
@@ -410,8 +482,10 @@ export function ChatInterface() {
                   <MortgageOffersCard
                     offers={message.mortgageOffers}
                     profile={message.mortgageProfile}
-                    baseRate={message.mortgageRateMeta?.baseRate}
+                    baseRate30={message.mortgageRateMeta?.baseRate30}
+                    baseRate15={message.mortgageRateMeta?.baseRate15}
                     baseRateSource={message.mortgageRateMeta?.baseRateSource}
+                    baseRateAsOf={message.mortgageRateMeta?.baseRateAsOf}
                   />
                 </div>
               )}
@@ -425,6 +499,13 @@ export function ChatInterface() {
                       conversationId={sessionId}
                     />
                   ))}
+                  <p className="text-[11px] text-white/35 text-center px-4 leading-relaxed pt-1">
+                    Rates and coverage estimates are based on the
+                    information you provided and current market data.
+                    Final rates are determined by each provider upon
+                    full application review. Alto is not a licensed
+                    insurance agent or mortgage broker.
+                  </p>
                 </div>
               )}
             </div>

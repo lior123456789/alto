@@ -7,8 +7,10 @@ import type { MortgageOfferLite, MortgageProfileLite } from "@/types";
 interface Props {
   offers: MortgageOfferLite[];
   profile: MortgageProfileLite;
-  baseRate?: number;
-  baseRateSource?: "fred" | "fallback";
+  baseRate30?: number;
+  baseRate15?: number;
+  baseRateSource?: "freddiemac" | "fred" | "fallback";
+  baseRateAsOf?: string;
 }
 
 interface ProfileField {
@@ -16,12 +18,16 @@ interface ProfileField {
   value: string;
 }
 
+type Term = "30" | "15";
+
 export function MortgageOffersCard({
   offers,
   profile,
-  baseRate,
-  baseRateSource,
+  baseRate30,
+  baseRate15,
+  baseRateAsOf,
 }: Props) {
+  const [term, setTerm] = useState<Term>("30");
   const fields = buildProfileFields(profile);
   const fullProfileText = fields
     .map((f) => `${f.label}: ${f.value}`)
@@ -50,9 +56,16 @@ export function MortgageOffersCard({
     }
   };
 
+  const sortedOffers = [...offers].sort((a, b) =>
+    term === "30"
+      ? a.estimatedRate30 - b.estimatedRate30
+      : a.estimatedRate15 - b.estimatedRate15,
+  );
+  const activeBaseRate = term === "30" ? baseRate30 : baseRate15;
+
   return (
     <div className="space-y-3">
-      {/* Banner — explains the flow */}
+      {/* Banner */}
       <div className="rounded-2xl bg-sky-500/[0.08] border border-sky-400/30 px-4 py-3 flex items-start gap-3">
         <Sparkles className="w-4 h-4 text-sky-300 mt-0.5 shrink-0" />
         <p className="text-[13px] leading-relaxed text-white/85">
@@ -61,77 +74,103 @@ export function MortgageOffersCard({
         </p>
       </div>
 
+      {/* 30 vs 15 year term toggle */}
+      <div className="flex justify-center">
+        <div className="inline-flex rounded-full bg-white/[0.04] border border-white/10 p-1">
+          {(["30", "15"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTerm(t)}
+              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
+                term === t
+                  ? "bg-sky-500 text-white shadow"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              {t}-year fixed
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Offer list */}
-      {offers.map((offer, i) => (
-        <div
-          key={offer.lender}
-          className={`rounded-2xl p-5 ${
-            i === 0
-              ? "bg-sky-500/[0.06] border border-sky-400/30"
-              : "bg-white/[0.03] border border-white/[0.06]"
-          }`}
-        >
-          {i === 0 && (
-            <div className="text-[11px] font-medium text-sky-300 bg-sky-500/10 px-2 py-1 rounded-full inline-block mb-3">
-              Lowest rate
-            </div>
-          )}
-          <div className="flex justify-between items-start mb-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-white/40" />
-                <h3 className="font-semibold text-white text-base">
-                  {offer.lender}
-                </h3>
-              </div>
-              {offer.note && (
-                <div className="text-[12px] text-white/50 mt-1.5 max-w-md">
-                  {offer.note}
-                </div>
-              )}
-            </div>
-            <div className="text-right">
-              <div className="text-2xl font-semibold text-white">
-                {offer.estimatedRate}%
-              </div>
-              <div className="text-xs text-white/40">est. APR</div>
-            </div>
-          </div>
-
-          {offer.estimatedMonthly > 0 && (
-            <div className="flex justify-between text-sm border-t border-white/[0.06] pt-3 mb-4">
-              <span className="text-white/50">Est. monthly payment</span>
-              <span className="text-white font-medium">
-                ${offer.estimatedMonthly.toLocaleString()}/mo
-              </span>
-            </div>
-          )}
-
-          <a
-            href={offer.applyUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`w-full py-3 rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-2 ${
+      {sortedOffers.map((offer, i) => {
+        const rate =
+          term === "30" ? offer.estimatedRate30 : offer.estimatedRate15;
+        const monthly =
+          term === "30" ? offer.estimatedMonthly30 : offer.estimatedMonthly15;
+        return (
+          <div
+            key={offer.lender}
+            className={`rounded-2xl p-5 ${
               i === 0
-                ? "bg-sky-500 hover:bg-sky-400 text-white"
-                : "bg-white text-black hover:bg-white/90"
+                ? "bg-sky-500/[0.06] border border-sky-400/30"
+                : "bg-white/[0.03] border border-white/[0.06]"
             }`}
           >
-            Apply at {offer.lender} →
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
-        </div>
-      ))}
+            {i === 0 && (
+              <div className="text-[11px] font-medium text-sky-300 bg-sky-500/10 px-2 py-1 rounded-full inline-block mb-3">
+                Lowest rate
+              </div>
+            )}
+            <div className="flex justify-between items-start mb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-white/40" />
+                  <h3 className="font-semibold text-white text-base">
+                    {offer.lender}
+                  </h3>
+                </div>
+                {offer.note && (
+                  <div className="text-[12px] text-white/50 mt-1.5 max-w-md">
+                    {offer.note}
+                  </div>
+                )}
+              </div>
+              <div className="text-right">
+                <div className="text-2xl font-semibold text-white">
+                  {rate}%
+                </div>
+                <div className="text-xs text-white/40">
+                  est. APR · {term}yr
+                </div>
+              </div>
+            </div>
 
-      {/* Rate disclaimer — directly under the offers list */}
-      <p className="text-[11px] text-white/40 text-center px-4">
-        Rates shown are based on the current Freddie Mac PMMS weekly average
-        {baseRate ? ` (${baseRate}%)` : ""}
-        {baseRateSource === "fallback" ? " — cached fallback" : ""}. Your
-        actual rate depends on credit score, loan size, and lender review.
+            {monthly > 0 && (
+              <div className="flex justify-between text-sm border-t border-white/[0.06] pt-3 mb-4">
+                <span className="text-white/50">Est. monthly payment</span>
+                <span className="text-white font-medium">
+                  ${monthly.toLocaleString()}/mo
+                </span>
+              </div>
+            )}
+
+            <a
+              href={offer.applyUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`w-full py-3 rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-2 ${
+                i === 0
+                  ? "bg-sky-500 hover:bg-sky-400 text-white"
+                  : "bg-white text-black hover:bg-white/90"
+              }`}
+            >
+              Apply at {offer.lender} →
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          </div>
+        );
+      })}
+
+      {/* Single, clean rate disclaimer */}
+      <p className="text-[11px] text-white/35 text-center px-4">
+        Based on current Freddie Mac weekly average
+        {activeBaseRate ? ` (${activeBaseRate}%)` : ""}
+        {baseRateAsOf ? ` · as of ${baseRateAsOf}` : ""}. Rates update weekly.
       </p>
 
-      {/* Profile reference card — copy each field or the whole thing */}
+      {/* Profile reference card */}
       <div className="rounded-2xl bg-white/[0.02] border border-white/[0.06] p-5">
         <div className="flex items-center justify-between mb-4">
           <div>

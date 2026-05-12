@@ -2,16 +2,27 @@ export type Vertical = "insurance" | "mortgage" | "real_estate";
 export type InsuranceType = "home" | "renters" | "auto" | "life";
 export type LeadStatus = "clicked" | "applied" | "converted";
 
+export interface AutoCoverage {
+  liability: string;
+  collision: string;
+  comprehensive: string;
+  uninsuredMotorist: string;
+}
+
 export interface InsuranceQuote {
   provider: string;
   providerLogo: string;
   monthlyPrice: number;
   annualPrice: number;
+  /** Which insurance vertical this quote is for — drives card rendering. */
+  type: "home" | "renters" | "auto" | "life";
   coverage: {
     dwelling: number;
     liability: number;
     deductible: number;
   };
+  /** Auto-specific coverage breakdown, only populated when type === "auto". */
+  autoCoverage?: AutoCoverage;
   highlights: string[];
   applyUrl: string;
   rating: number;
@@ -38,15 +49,19 @@ export interface PlaidSummary {
 export interface MortgageOfferLite {
   lender: string;
   logo: string;
-  estimatedRate: number;
-  estimatedMonthly: number;
+  estimatedRate30: number;
+  estimatedMonthly30: number;
+  estimatedRate15: number;
+  estimatedMonthly15: number;
   applyUrl: string;
   note: string | null;
 }
 
 export interface MortgageRateMeta {
-  baseRate: number;
-  baseRateSource: "fred" | "fallback";
+  baseRate30: number;
+  baseRate15: number;
+  baseRateSource: "freddiemac" | "fred" | "fallback";
+  baseRateAsOf?: string;
 }
 
 export interface MortgageProfileLite {
@@ -85,6 +100,7 @@ export interface ChatMessage {
 }
 
 export interface FetchQuotesParams {
+  sessionId?: string;
   vertical: Vertical;
   type: InsuranceType;
   zip_code: string;

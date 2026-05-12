@@ -7,7 +7,11 @@
 // so we don't attempt to. The MortgageOffersCard shows the profile for
 // copy/paste alongside the apply button.
 
-import { getCachedMortgageRate, getLenderRates } from "./rates";
+import {
+  getCachedMortgageRate,
+  getCached15YearRate,
+  getLenderRates,
+} from "./rates";
 
 export interface MortgageProfile {
   purpose?: "purchase" | "refinance";
@@ -30,16 +34,19 @@ export interface MortgageProfile {
 export interface MortgageOffer {
   lender: string;
   logo: string;
-  estimatedRate: number;
-  estimatedMonthly: number;
+  estimatedRate30: number;
+  estimatedMonthly30: number;
+  estimatedRate15: number;
+  estimatedMonthly15: number;
   applyUrl: string;
   note: string | null;
 }
 
 export interface MortgageOffersResponse {
   offers: MortgageOffer[];
-  baseRate: number;
-  baseRateSource: "fred" | "fallback";
+  baseRate30: number;
+  baseRate15: number;
+  baseRateSource: "freddiemac" | "fred" | "fallback";
   baseRateAsOf?: string;
 }
 
@@ -80,25 +87,36 @@ function monthlyPayment(loan: number, ratePct: number, years = 30): number {
 export async function buildMortgageOffers(
   profile: MortgageProfile,
 ): Promise<MortgageOffersResponse> {
-  const cached = await getCachedMortgageRate();
-  const baseRate = cached.rate;
-  const lenderRates = getLenderRates(baseRate);
+  const [cached30, cached15] = await Promise.all([
+    getCachedMortgageRate(),
+    getCached15YearRate(),
+  ]);
+  const rates30 = getLenderRates(cached30.rate);
+  const rates15 = getLenderRates(cached15.rate);
   const loan = profile.loan_amount ?? 0;
 
-  const offers: MortgageOffer[] = Object.entries(lenderRates)
-    .map(([name, rate]) => ({
-      lender: name,
-      logo: LENDER_LOGOS[name] ?? "",
-      estimatedRate: rate,
-      estimatedMonthly: loan ? monthlyPayment(loan, rate) : 0,
-      applyUrl: LENDER_LINKS[name] ?? "",
-      note: LENDER_NOTES[name] ?? null,
-    }))
-    .sort((a, b) => a.estimatedRate - b.estimatedRate);
+  const offers: MortgageOffer[] = Object.keys(rates30)
+    .map((name) => {
+      const r30 = rates30[name];
+      const r15 = rates15[name];
+      return {
+        lender: name,
+        logo: LENDER_LOGOS[name] ?? "",
+        estimatedRate30: r30,
+        estimatedMonthly30: loan ? monthlyPayment(loan, r30, 30) : 0,
+        estimatedRate15: r15,
+        estimatedMonthly15: loan ? monthlyPayment(loan, r15, 15) : 0,
+        applyUrl: LENDER_LINKS[name] ?? "",
+        note: LENDER_NOTES[name] ?? null,
+      };
+    })
+    .sort((a, b) => a.estimatedRate30 - b.estimatedRate30);
 
   return {
     offers,
-    baseRate,
-    baseRateSource: cached.source,
+    baseRate30: cached30.rate,
+    baseRate15: cached15.rate,
+    baseRateSource: cached30.source,
+    baseRateAsOf: cached30.asOf,
   };
 }

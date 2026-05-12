@@ -135,14 +135,21 @@ export async function POST(req: NextRequest) {
                 const profile = JSON.parse(
                   mortgageMatch[1],
                 ) as MortgageProfile;
-                const { offers, baseRate, baseRateSource } =
-                  await buildMortgageOffers(profile);
+                const {
+                  offers,
+                  baseRate30,
+                  baseRate15,
+                  baseRateSource,
+                  baseRateAsOf,
+                } = await buildMortgageOffers(profile);
                 send({
                   type: "mortgage_offers",
                   profile,
                   offers,
-                  baseRate,
+                  baseRate30,
+                  baseRate15,
                   baseRateSource,
+                  baseRateAsOf,
                 });
               } catch (e) {
                 console.error("[chat] mortgage parse failed:", e);
@@ -187,6 +194,7 @@ export async function POST(req: NextRequest) {
                 let params: FetchQuotesParams;
                 if (fetchMatch) {
                   params = JSON.parse(fetchMatch[1]) as FetchQuotesParams;
+                  params.sessionId = sessionId;
                 } else {
                   // EverQuote-rejected fallback — reuse the profile we
                   // already collected during the submit_lead flow so the
@@ -200,6 +208,7 @@ export async function POST(req: NextRequest) {
                     type: (sp.insurance_type as FetchQuotesParams["type"]) ?? "home",
                     zip_code: (sp.zip_code as string) ?? "00000",
                     profile: sp,
+                    sessionId,
                   };
                 }
                 const quotes = await fetchInsuranceQuotes(params);

@@ -67,11 +67,27 @@ export function QuoteCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 mb-4 py-3 border-t border-b border-white/[0.06]">
-        <Stat label="Dwelling" value={`$${(quote.coverage.dwelling / 1000).toFixed(0)}K`} />
-        <Stat label="Liability" value={`$${(quote.coverage.liability / 1000).toFixed(0)}K`} />
-        <Stat label="Deductible" value={`$${quote.coverage.deductible.toLocaleString()}`} />
-      </div>
+      {quote.type === "auto" && quote.autoCoverage ? (
+        <div className="grid grid-cols-2 gap-2 mb-4 py-3 border-t border-b border-white/[0.06]">
+          <Stat label="Liability" value={quote.autoCoverage.liability} />
+          <Stat label="Collision" value={quote.autoCoverage.collision} />
+          <Stat label="Comprehensive" value={quote.autoCoverage.comprehensive} />
+          <Stat label="Uninsured motorist" value={quote.autoCoverage.uninsuredMotorist} />
+        </div>
+      ) : quote.type === "renters" ? (
+        <div className="grid grid-cols-2 gap-2 mb-4 py-3 border-t border-b border-white/[0.06]">
+          <Stat label="Personal property" value="$30K" />
+          <Stat label="Liability" value={`$${(quote.coverage.liability / 1000).toFixed(0)}K`} />
+          <Stat label="Deductible" value={`$${quote.coverage.deductible.toLocaleString()}`} />
+          <Stat label="Loss of use" value="$15K" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-2 mb-4 py-3 border-t border-b border-white/[0.06]">
+          <Stat label="Dwelling" value={`$${(quote.coverage.dwelling / 1000).toFixed(0)}K`} />
+          <Stat label="Liability" value={`$${(quote.coverage.liability / 1000).toFixed(0)}K`} />
+          <Stat label="Deductible" value={`$${quote.coverage.deductible.toLocaleString()}`} />
+        </div>
+      )}
 
       <ul className="mb-5 space-y-1.5">
         {quote.highlights.map((h) => (
@@ -94,13 +110,6 @@ export function QuoteCard({
       >
         Continue at {quote.provider} →
       </button>
-
-      <p className="text-[10px] text-white/30 text-center mt-3 leading-relaxed">
-        Rates and coverage estimates are based on the information you
-        provided and current market data. Final rates are determined by
-        each provider upon full application review. Alto is not a
-        licensed insurance agent or mortgage broker.
-      </p>
     </div>
   );
 }

@@ -2,6 +2,8 @@
 // MORTGAGE30US). Updates every Thursday. We cache in-process for 24h so
 // we don't hammer FRED on every chat turn.
 
+import { getPmmsLatest } from "./freddiemac";
+
 const FRED_BASE =
   "https://api.stlouisfed.org/fred/series/observations" +
   "?sort_order=desc&limit=1&file_type=json";
@@ -15,7 +17,8 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 interface CachedRate {
   rate: number;
   fetchedAt: number;
-  source: "fred" | "fallback";
+  source: "freddiemac" | "fred" | "fallback";
+  asOf?: string;
 }
 
 let cached30: CachedRate | null = null;
@@ -36,27 +39,68 @@ async function fetchFred(url: string, fallback: number): Promise<CachedRate> {
     if (!obs) throw new Error("no observations");
     const rate = parseFloat(obs.value);
     if (!Number.isFinite(rate)) throw new Error("non-numeric rate");
-    return { rate, fetchedAt: Date.now(), source: "fred" };
+    return {
+      rate,
+      fetchedAt: Date.now(),
+      source: "fred",
+      asOf: obs.date,
+    };
   } catch (e) {
     console.warn("[rates] FRED fetch failed, using fallback:", e);
     return { rate: fallback, fetchedAt: Date.now(), source: "fallback" };
   }
 }
 
+// Try Freddie Mac (canonical PMMS xlsx) first, then FRED, then hardcoded.
+async function fetchBoth(): Promise<{
+  thirty: CachedRate;
+  fifteen: CachedRate;
+}> {
+  try {
+    const pmms = await getPmmsLatest();
+    return {
+      thirty: {
+        rate: pmms.thirtyYear,
+        fetchedAt: Date.now(),
+        source: "freddiemac",
+        asOf: pmms.asOf,
+      },
+      fifteen: {
+        rate: pmms.fifteenYear,
+        fetchedAt: Date.now(),
+        source: "freddiemac",
+        asOf: pmms.asOf,
+      },
+    };
+  } catch (e) {
+    console.warn("[rates] Freddie Mac PMMS failed, trying FRED:", e);
+  }
+  const [thirty, fifteen] = await Promise.all([
+    fetchFred(FRED_URL, FALLBACK_30YR),
+    fetchFred(FRED_URL_15, FALLBACK_15YR),
+  ]);
+  return { thirty, fifteen };
+}
+
 export async function getLiveMortgageRate() {
-  return fetchFred(FRED_URL, FALLBACK_30YR);
+  const { thirty } = await fetchBoth();
+  return thirty;
 }
 
 export async function getCachedMortgageRate(): Promise<CachedRate> {
   if (cached30 && Date.now() - cached30.fetchedAt < ONE_DAY_MS) return cached30;
-  cached30 = await fetchFred(FRED_URL, FALLBACK_30YR);
-  return cached30;
+  const { thirty, fifteen } = await fetchBoth();
+  cached30 = thirty;
+  cached15 = fifteen;
+  return thirty;
 }
 
 export async function getCached15YearRate(): Promise<CachedRate> {
   if (cached15 && Date.now() - cached15.fetchedAt < ONE_DAY_MS) return cached15;
-  cached15 = await fetchFred(FRED_URL_15, FALLBACK_15YR);
-  return cached15;
+  const { thirty, fifteen } = await fetchBoth();
+  cached30 = thirty;
+  cached15 = fifteen;
+  return fifteen;
 }
 
 const LENDER_SPREADS: Record<string, number> = {
