@@ -32,4 +32,10 @@ export async function joinWaitlist(email: string, source = "landing") {
     userAgent:
       typeof navigator !== "undefined" ? navigator.userAgent : "unknown",
   });
+  // Fire-and-forget welcome email. Don't block the success state on this.
+  fetch("/api/waitlist/welcome", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: cleaned }),
+  }).catch(() => {});
 }

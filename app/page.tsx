@@ -265,8 +265,8 @@ export default function LandingPage() {
           <hr className="my-[2vw] border-none border-t border-white/30" />
           <div className="mt-auto flex flex-col md:flex-row md:items-end justify-between gap-6">
             <p className="max-w-[50ch] text-[clamp(1rem,2.5vw,2rem)] font-normal leading-relaxed text-white/70">
-              30 seconds to your first quote — at launch. Early users get 3
-              months of Pro free.
+              30 seconds to your first quote — at launch. Skip the broker
+              entirely.
             </p>
             <a
               href="#waitlist"
@@ -406,7 +406,7 @@ function WaitlistHero() {
       )}
 
       <p className="mt-4 text-xs text-white/35">
-        Early users get 3 months of Pro free.
+        We&apos;ll email you the moment Alto goes live.
       </p>
 
       {showDevLinks && (
