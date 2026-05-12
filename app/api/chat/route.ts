@@ -7,6 +7,10 @@ import {
   type AltoUserProfile,
 } from "@/lib/everquote";
 import { saveConversation, createServerClient } from "@/lib/supabase";
+import {
+  buildMortgageOffers,
+  type MortgageProfile,
+} from "@/lib/mortgage";
 import type { ChatMessage, FetchQuotesParams } from "@/types";
 
 export const runtime = "nodejs";
@@ -119,6 +123,30 @@ export async function POST(req: NextRequest) {
             // 1.5 Plaid connect (mortgage flow)
             if (/<plaid_connect\s*\/?>/i.test(complete)) {
               send({ type: "plaid_connect" });
+            }
+
+            // 1.75 Mortgage recommendations — fan out to lender deep links
+            const mortgageMatch = complete.match(
+              /<recommend_mortgage>([\s\S]*?)<\/recommend_mortgage>/,
+            );
+            if (mortgageMatch) {
+              try {
+                const profile = JSON.parse(
+                  mortgageMatch[1],
+                ) as MortgageProfile;
+                const offers = buildMortgageOffers(profile);
+                send({
+                  type: "mortgage_offers",
+                  profile,
+                  offers,
+                });
+              } catch (e) {
+                console.error("[chat] mortgage parse failed:", e);
+                send({
+                  type: "error",
+                  error: "Couldn't generate mortgage offers.",
+                });
+              }
             }
 
             // 2. Quote fetch (mock fallback / life insurance)

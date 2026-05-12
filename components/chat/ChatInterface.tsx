@@ -15,13 +15,35 @@ import type {
   InsuranceQuote,
   LeadAccepted,
   PlaidSummary,
+  MortgageOfferLite,
+  MortgageProfileLite,
 } from "@/types";
+import { MortgageOffersCard } from "./MortgageOffersCard";
 
 const INITIAL: ChatMessage = {
   role: "assistant",
   content:
     "Hey — I'm Alto. I help you find the best insurance, mortgage, or home deal without a broker taking a cut. What are you looking for?",
 };
+
+// Strip every special marker (markdown emphasis + control tags) so the
+// rendered text is plain prose. Defense-in-depth: the system prompt also
+// tells Claude not to emit markdown, but anything that slips through is
+// neutralized here.
+function stripDisplay(raw: string): string {
+  return raw
+    .replace(/<fetch_quotes>[\s\S]*?<\/fetch_quotes>/g, "")
+    .replace(/<submit_lead>[\s\S]*?<\/submit_lead>/g, "")
+    .replace(/<plaid_connect\s*\/?>/gi, "")
+    .replace(/<recommend_mortgage>[\s\S]*?<\/recommend_mortgage>/g, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/(?<!_)_([^_\n]+)_(?!_)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^[-*+]\s+/gm, "• ");
+}
 
 const QUICK_REPLIES = [
   "Renters insurance",
@@ -49,6 +71,41 @@ export function ChatInterface() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
+
+  // Typewriter — advances the last assistant message's `revealedContent`
+  // toward its full `content` at a paced rate. If the model is far ahead
+  // of the typewriter, we chunk a few chars at a time so we don't lag.
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const lastIdx = messages.length - 1;
+    const last = messages[lastIdx];
+    if (last.role !== "assistant") return;
+    const revealed = last.revealedContent ?? "";
+    const full = last.content ?? "";
+    if (revealed.length >= full.length) return;
+
+    const lag = full.length - revealed.length;
+    const charsToAdd = lag > 400 ? 6 : lag > 120 ? 3 : 1;
+    const delayMs = lag > 400 ? 12 : lag > 120 ? 22 : 35; // ~30-80 cps
+
+    const t = setTimeout(() => {
+      setMessages((prev) => {
+        const next = [...prev];
+        const m = next[lastIdx];
+        if (!m || m.role !== "assistant") return prev;
+        const curRevealed = m.revealedContent ?? "";
+        const curFull = m.content ?? "";
+        if (curRevealed.length >= curFull.length) return prev;
+        next[lastIdx] = {
+          ...m,
+          revealedContent: curFull.slice(0, curRevealed.length + charsToAdd),
+        };
+        return next;
+      });
+    }, delayMs);
+
+    return () => clearTimeout(t);
+  }, [messages]);
 
   const sendMessage = useCallback(
     async (override?: string) => {
@@ -79,7 +136,10 @@ export function ChatInterface() {
         const decoder = new TextDecoder();
         let assistantContent = "";
 
-        setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "", revealedContent: "" },
+        ]);
         setIsLoading(false);
 
         while (true) {
@@ -108,10 +168,7 @@ export function ChatInterface() {
 
               if (parsed.chunk) {
                 assistantContent += parsed.chunk;
-                const display = assistantContent
-                  .replace(/<fetch_quotes>[\s\S]*?<\/fetch_quotes>/g, "")
-                  .replace(/<submit_lead>[\s\S]*?<\/submit_lead>/g, "")
-                  .replace(/<plaid_connect\s*\/?>/gi, "");
+                const display = stripDisplay(assistantContent);
                 setMessages((prev) => [
                   ...prev.slice(0, -1),
                   { ...prev[prev.length - 1], content: display },
@@ -156,6 +213,29 @@ export function ChatInterface() {
                   return [
                     ...prev.slice(0, -1),
                     { ...last, plaidConnect: true },
+                  ];
+                });
+              }
+
+              if (
+                parsed.type === "mortgage_offers" &&
+                Array.isArray(
+                  (parsed as { offers?: MortgageOfferLite[] }).offers,
+                )
+              ) {
+                const cast = parsed as unknown as {
+                  offers: MortgageOfferLite[];
+                  profile: MortgageProfileLite;
+                };
+                setMessages((prev) => {
+                  const last = prev[prev.length - 1];
+                  return [
+                    ...prev.slice(0, -1),
+                    {
+                      ...last,
+                      mortgageOffers: cast.offers,
+                      mortgageProfile: cast.profile,
+                    },
                   ];
                 });
               }
@@ -254,6 +334,14 @@ export function ChatInterface() {
               {message.leadAccepted && (
                 <div className="ml-10">
                   <CallCard lead={message.leadAccepted} />
+                </div>
+              )}
+              {message.mortgageOffers && message.mortgageProfile && (
+                <div className="ml-10">
+                  <MortgageOffersCard
+                    offers={message.mortgageOffers}
+                    profile={message.mortgageProfile}
+                  />
                 </div>
               )}
               {message.quotes && message.quotes.length > 0 && (

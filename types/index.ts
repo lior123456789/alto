@@ -35,13 +35,43 @@ export interface PlaidSummary {
   primaryAccount: string | null;
 }
 
+export interface MortgageOfferLite {
+  lender: string;
+  logo: string;
+  estimatedRate: number;
+  estimatedMonthly: number;
+  applyUrl: string;
+  prefillSupported: boolean;
+  note: string | null;
+}
+
+export interface MortgageProfileLite {
+  city?: string;
+  state?: string;
+  zip_code?: string;
+  property_value?: number;
+  loan_amount?: number;
+  down_payment?: number;
+  credit_score_range?: string;
+  annual_income?: number;
+  total_assets?: number;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  phone_number?: string;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  /** Typewriter progress — assistant only. Prefix of `content` that's currently visible. */
+  revealedContent?: string;
   quotes?: InsuranceQuote[];
   leadAccepted?: LeadAccepted;
   plaidConnect?: boolean;
   plaidSummary?: PlaidSummary;
+  mortgageOffers?: MortgageOfferLite[];
+  mortgageProfile?: MortgageProfileLite;
 }
 
 export interface FetchQuotesParams {

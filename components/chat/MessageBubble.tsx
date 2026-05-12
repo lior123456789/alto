@@ -22,6 +22,16 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
   }
 
   // Alto message — avatar + name + content, no bubble.
+  // Display revealedContent if present (typewriter effect mid-stream),
+  // otherwise the full content.
+  const display =
+    message.revealedContent !== undefined
+      ? message.revealedContent
+      : message.content;
+  const showCaret =
+    message.revealedContent !== undefined &&
+    message.revealedContent.length < message.content.length;
+
   return (
     <motion.div
       className="flex gap-3.5"
@@ -35,7 +45,14 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
           Alto
         </div>
         <div className="text-[16px] leading-[1.65] text-white/90 whitespace-pre-wrap">
-          {message.content || (
+          {display ? (
+            <>
+              {display}
+              {showCaret && (
+                <span className="inline-block w-[2px] h-[1em] bg-white/60 ml-[1px] align-[-2px] animate-pulse" />
+              )}
+            </>
+          ) : (
             <span className="inline-flex items-center gap-1 text-white/40">
               <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-pulse" />
             </span>
