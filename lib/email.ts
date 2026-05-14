@@ -41,7 +41,19 @@ export function waitlistWelcomeHtml(): string {
   <html>
     <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#050507; color:#fff; padding:32px 24px; max-width:560px; margin:0 auto;">
       <div style="text-align:center; margin-bottom:32px;">
-        <div style="display:inline-block; width:40px; height:40px; border-radius:10px; background:linear-gradient(135deg,#38bdf8,#0284c7); color:#fff; font-weight:700; font-size:20px; line-height:40px;">A</div>
+        <svg width="48" height="48" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;">
+          <defs>
+            <linearGradient id="ew" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#38bdf8"/>
+              <stop offset="1" stop-color="#0369a1"/>
+            </linearGradient>
+          </defs>
+          <rect width="64" height="64" rx="14" fill="url(#ew)"/>
+          <g fill="none" stroke="#ffffff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 48 L32 16 L48 48"/>
+            <path d="M23 38 L41 38" stroke-width="4" opacity="0.55"/>
+          </g>
+        </svg>
       </div>
       <h1 style="font-size:28px; font-weight:600; margin:0 0 16px; letter-spacing:-0.02em;">You're on the Alto waitlist.</h1>
       <p style="font-size:16px; line-height:1.6; color:rgba(255,255,255,0.7); margin:0 0 16px;">

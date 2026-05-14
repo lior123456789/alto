@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
+import { AltoLogo } from "@/components/ui/AltoLogo";
 import { getFirebaseAuth, onAuthStateChanged } from "@/lib/firebase";
 import { setUserTier, type SubscriptionTier } from "@/lib/subscription";
 
@@ -74,6 +75,9 @@ export function BillingSuccessInner() {
   return (
     <main className="min-h-screen bg-[#050507] text-white flex items-center justify-center px-6">
       <div className="max-w-md w-full rounded-2xl bg-white/[0.03] border border-white/[0.06] p-8 text-center">
+        <div className="flex justify-center mb-6">
+          <AltoLogo size={40} />
+        </div>
         {status === "working" && (
           <>
             <div className="w-12 h-12 mx-auto mb-4 rounded-full border-2 border-sky-400/40 border-t-sky-400 animate-spin" />

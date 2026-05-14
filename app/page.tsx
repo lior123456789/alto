@@ -7,11 +7,15 @@ import FlowArt, { FlowSection } from "@/components/ui/story-scroll";
 import { ScrollTiltedGrid } from "@/components/ui/scroll-tilted-grid";
 import { Sparkles, ArrowRight, CheckCircle2 } from "lucide-react";
 import { joinWaitlist } from "@/lib/waitlist";
+import { AltoLogo } from "@/components/ui/AltoLogo";
 
 export default function LandingPage() {
   return (
     <main className="bg-[#050507] text-white">
-      {/* Top-right floating nav (no logo) */}
+      {/* Top floating nav with brand lockup */}
+      <div className="fixed top-5 left-6 z-50">
+        <AltoLogo size={28} wordmark textClassName="text-white" />
+      </div>
       <div className="fixed top-5 right-6 z-50 flex items-center gap-5">
         <a
           href="#waitlist"

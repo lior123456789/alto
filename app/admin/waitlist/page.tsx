@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Copy, Send } from "lucide-react";
+import { Copy, Send } from "lucide-react";
+import { AltoLogo } from "@/components/ui/AltoLogo";
 import {
   getFirebaseAuth,
   getFirebaseDb,
@@ -202,17 +203,14 @@ export default function AdminWaitlistPage() {
   return (
     <main className="min-h-screen bg-[#050507] text-white">
       <header className="px-6 py-4 flex items-center justify-between border-b border-white/[0.05]">
-        <Link
-          href="/"
-          className="flex items-center gap-1.5 text-sm text-white/50 hover:text-white"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Home
+        <Link href="/" className="hover:opacity-80">
+          <AltoLogo size={22} wordmark textClassName="text-white" />
         </Link>
-        <h1 className="text-base font-semibold tracking-tight">
-          Admin · Waitlist
-        </h1>
-        <div className="text-xs text-white/40">{authEmail}</div>
+        <div className="flex items-center gap-3 text-xs">
+          <span className="text-white/40">Admin · Waitlist</span>
+          <span className="text-white/30">·</span>
+          <span className="text-white/60">{authEmail}</span>
+        </div>
       </header>
 
       <section className="max-w-5xl mx-auto px-6 pt-10 pb-24 space-y-10">
